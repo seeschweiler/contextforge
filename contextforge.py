@@ -6,6 +6,7 @@ import fnmatch
 import datetime
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import tiktoken
 
 def get_file_content(file_path):
     """Read and return the content of a file."""
@@ -37,22 +38,32 @@ def load_cfignore(project_path):
             ignore_patterns = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     return ignore_patterns
 
-def should_ignore(file_path, ignore_patterns):
-    """Check if a file should be ignored based on .cfignore patterns."""
+def should_ignore(path, ignore_patterns, output_file):
+    """Check if a file or directory should be ignored based on .cfignore patterns and output file."""
+    # Check if the path is the output file
+    if os.path.samefile(path, output_file):
+        return True
+    
     for pattern in ignore_patterns:
-        if fnmatch.fnmatch(file_path, pattern):
+        if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(os.path.basename(path), pattern):
             return True
     return False
 
+def count_tokens(text):
+    """Count the number of tokens in the given text."""
+    enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    return len(enc.encode(text))
+
 def process_file(file_info):
-    """Process a single file and return its content."""
-    file_path, relative_path, ignore_patterns, max_file_size = file_info
+    """Process a single file and return its content and token count."""
+    file_path, relative_path, ignore_patterns, max_file_size, output_file = file_info
     
-    if should_ignore(relative_path, ignore_patterns):
-        return None
+    if should_ignore(file_path, ignore_patterns, output_file):
+        return None, 0
     
     if os.path.getsize(file_path) > max_file_size:
-        return f"## File: {relative_path}\n\nFile exceeds size limit. Content not included.\n\n"
+        content = f"## File: {relative_path}\n\nFile exceeds size limit. Content not included.\n\n"
+        return content, count_tokens(content)
     
     content = f"## File: {relative_path}\n\nLocation: `{file_path}`\n\n"
     
@@ -69,7 +80,7 @@ def process_file(file_info):
             language = get_language(file_extension)
             content += f"```{language}\n{file_content}\n```\n\n"
     
-    return content
+    return content, count_tokens(content)
 
 def compile_project(project_path, output_file, output_format='markdown', max_file_size=1000000):
     """Compile project files into a single file."""
@@ -79,24 +90,33 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
     total_files = 0
     processed_files = 0
     ignored_files = 0
+    total_tokens = 0
     
     file_contents = []
     
     with ThreadPoolExecutor() as executor:
         future_to_file = {}
-        for root, _, files in os.walk(project_path):
+        for root, dirs, files in os.walk(project_path):
+            # Check and remove ignored directories
+            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns, output_file)]
+            
             for file in files:
                 total_files += 1
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, project_path)
-                future = executor.submit(process_file, (file_path, relative_path, ignore_patterns, max_file_size))
-                future_to_file[future] = relative_path
+                
+                if not should_ignore(file_path, ignore_patterns, output_file):
+                    future = executor.submit(process_file, (file_path, relative_path, ignore_patterns, max_file_size, output_file))
+                    future_to_file[future] = relative_path
+                else:
+                    ignored_files += 1
         
         for future in tqdm(as_completed(future_to_file), total=len(future_to_file), desc="Forging context", unit="file"):
-            content = future.result()
+            content, token_count = future.result()
             if content:
                 file_contents.append(content)
                 processed_files += 1
+                total_tokens += token_count
             else:
                 ignored_files += 1
     
@@ -109,7 +129,8 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
         "total_files": total_files,
         "processed_files": processed_files,
         "ignored_files": ignored_files,
-        "compilation_time": compilation_time
+        "compilation_time": compilation_time,
+        "total_tokens": total_tokens
     }
     
     with open(output_file, 'w', encoding='utf-8') as out_file:
@@ -120,7 +141,8 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
             out_file.write(f"- Total Files: {metadata['total_files']}\n")
             out_file.write(f"- Processed Files: {metadata['processed_files']}\n")
             out_file.write(f"- Ignored Files: {metadata['ignored_files']}\n")
-            out_file.write(f"- Compilation Time: {metadata['compilation_time']:.2f} seconds\n\n")
+            out_file.write(f"- Compilation Time: {metadata['compilation_time']:.2f} seconds\n")
+            out_file.write(f"- Total Tokens: {metadata['total_tokens']}\n\n")
             out_file.write("## File Contents\n\n")
             for content in file_contents:
                 out_file.write(content)
@@ -138,11 +160,19 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
             out_file.write("</body></html>")
         elif output_format == 'json':
             json.dump({"metadata": metadata, "contents": file_contents}, out_file, indent=2)
+    
+    print(f"\nContextForge compilation complete:")
+    print(f"- Total files: {total_files}")
+    print(f"- Processed files: {processed_files}")
+    print(f"- Ignored files: {ignored_files}")
+    print(f"- Total tokens: {total_tokens}")
+    print(f"- Compilation time: {compilation_time:.2f} seconds")
+    print(f"AI-ready context saved to {output_file}")
 
 def main():
     parser = argparse.ArgumentParser(
         description="ContextForge: Compile project files into a single AI-ready file.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,  # This allows us to format the epilog
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   Compile current directory to default output file:
@@ -171,7 +201,6 @@ Examples:
     args = parser.parse_args()
 
     compile_project(args.project_path, args.output_file, args.format, args.max_file_size)
-    print(f"ContextForge complete. AI-ready context saved to {args.output_file}")
 
 if __name__ == "__main__":
     main()
