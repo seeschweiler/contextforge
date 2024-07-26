@@ -1,7 +1,4 @@
-![ContextForge Logo]()
-<img src="https://github.com/seeschweiler/contextforge/blob/main/cflogo.png" alt="ContextForge Logo" width="250">
-
-
+<img src="https://github.com/seeschweiler/contextforge/blob/main/cflogo.png" alt="ContextForge Logo" width="350">
 
 # ContextForge
 
