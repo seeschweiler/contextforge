@@ -1,3 +1,5 @@
+![ContextForge Logo](https://github.com/seeschweiler/contextforge/blob/main/cflogo.png)
+
 # ContextForge
 
 ContextForge is a powerful and flexible command-line tool designed to compile the contents of a development project into a single, well-structured file. This compiled output is ideal for use as input to large language models (LLMs) like GPT, making it easier to provide comprehensive project context in a single prompt.
