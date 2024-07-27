@@ -7,6 +7,8 @@ import datetime
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import tiktoken
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
 
 def get_file_content(file_path):
     """Read and return the content of a file."""
@@ -41,7 +43,11 @@ def load_cfignore(project_path):
 def should_ignore(path, ignore_patterns, output_file):
     """Check if a file or directory should be ignored based on .cfignore patterns and output file."""
     # Check if the path is the output file
-    if os.path.samefile(path, output_file):
+    if output_file and os.path.exists(output_file) and os.path.samefile(path, output_file):
+        return True
+    
+    # If the output file doesn't exist yet, compare the paths
+    if output_file and os.path.abspath(path) == os.path.abspath(output_file):
         return True
     
     for pattern in ignore_patterns:
@@ -160,7 +166,33 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
             out_file.write("</body></html>")
         elif output_format == 'json':
             json.dump({"metadata": metadata, "contents": file_contents}, out_file, indent=2)
-    
+        elif output_format == 'xml':
+            root = ET.Element("documents")
+            for index, content in enumerate(file_contents, start=1):
+                document = ET.SubElement(root, "document")
+                document.set("index", str(index))
+                
+                # Extract file path from the content
+                file_path = content.split("\n", 2)[0].replace("## File: ", "").strip()
+                
+                source = ET.SubElement(document, "source")
+                source.text = file_path
+                
+                document_content = ET.SubElement(document, "document_content")
+                
+                # Remove the file path and location information
+                content_lines = content.split("\n")[2:]  # Skip the first two lines
+                cleaned_content = "\n".join(line for line in content_lines if not line.startswith("Location:"))
+                
+                # Remove code block markers if present
+                if cleaned_content.strip().startswith("```") and cleaned_content.strip().endswith("```"):
+                    cleaned_content = "\n".join(cleaned_content.split("\n")[1:-1])
+                
+                document_content.text = cleaned_content.strip()
+            
+            xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
+            out_file.write(xml_str)
+
     print(f"\nContextForge compilation complete:")
     print(f"- Total files: {total_files}")
     print(f"- Processed files: {processed_files}")
@@ -187,18 +219,27 @@ Examples:
   Compile with 500KB max file size:
     %(prog)s -m 500000
 
-  Compile to JSON format with 2MB max file size:
-    %(prog)s -f json -m 2000000 /path/to/project output.json
+  Compile to XML format with 2MB max file size:
+    %(prog)s -f xml -m 2000000 /path/to/project output.xml
 
   Get help:
     %(prog)s -h
         """
     )
     parser.add_argument("project_path", nargs='?', default=".", help="Path to the project folder (default: current directory)")
-    parser.add_argument("output_file", nargs='?', default="context_forge_output.md", help="Path to the output file")
-    parser.add_argument("-f", "--format", choices=['markdown', 'html', 'json'], default='markdown', help="Output format (default: %(default)s)")
+    parser.add_argument("output_file", nargs='?', default=None, help="Path to the output file (default: project_name.{format})")
+    parser.add_argument("-f", "--format", choices=['markdown', 'html', 'json', 'xml'], default='markdown', help="Output format (default: %(default)s)")
     parser.add_argument("-m", "--max-file-size", type=int, default=1000000, help="Maximum file size in bytes to include in compilation (default: %(default)s)")
     args = parser.parse_args()
+
+    # Determine the output file name
+    if args.output_file is None:
+        project_name = os.path.basename(os.path.abspath(args.project_path))
+        args.output_file = f"{project_name}.{args.format}"
+    else:
+        # Ensure the file extension matches the output format
+        base, _ = os.path.splitext(args.output_file)
+        args.output_file = f"{base}.{args.format}"
 
     compile_project(args.project_path, args.output_file, args.format, args.max_file_size)
 
