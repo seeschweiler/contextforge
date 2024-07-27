@@ -34,13 +34,15 @@ By bridging the gap between expansive codebases and the growing capabilities of 
 ## Features
 
 - **Project Compilation**: Recursively scans and compiles the contents of a project directory into a single file.
-- **Multiple Output Formats**: Supports Markdown, HTML, and JSON output formats.
+- **Multiple Output Formats**: Supports Markdown, HTML, JSON, and XML output formats.
 - **Syntax Highlighting**: Automatically detects and applies appropriate language syntax highlighting for code files.
 - **Ignore Patterns**: Supports `.cfignore` files to exclude specific files or directories from compilation, similar to `.gitignore`.
 - **File Size Limit**: Option to set a maximum file size for inclusion in the compilation.
 - **Metadata Inclusion**: Adds useful metadata about the compilation process to the output.
 - **Parallel Processing**: Uses multi-threading to speed up the compilation process for large projects.
 - **Progress Tracking**: Displays a progress bar during compilation.
+- **Smart File Naming**: Automatically uses the project folder name as the default output file name.
+- **Consistent File Extensions**: Ensures the output file extension matches the chosen format.
 
 ## Installation
 
@@ -66,8 +68,8 @@ python contextforge.py [project_path] [output_file] [-f FORMAT] [-m MAX_FILE_SIZ
 ```
 
 - `project_path`: Path to the project folder (default: current directory)
-- `output_file`: Path to the output file (default: context_forge_output.md)
-- `-f, --format`: Output format (markdown, html, or json; default: markdown)
+- `output_file`: Path to the output file (default: project_name.{format})
+- `-f, --format`: Output format (markdown, html, json, or xml; default: markdown)
 - `-m, --max-file-size`: Maximum file size in bytes to include (default: 1000000)
 
 For more information and options, use the help command:
@@ -100,15 +102,16 @@ build/*
 
 ## Output Formats
 
-ContextForge supports three output formats:
+ContextForge supports four output formats:
 
 1. **Markdown** (default): A well-structured Markdown file with appropriate code blocks and syntax highlighting.
 2. **HTML**: An HTML file with syntax-highlighted code blocks, suitable for viewing in a web browser.
 3. **JSON**: A JSON file containing the project structure and file contents, useful for programmatic processing.
+4. **XML**: An XML file with a structured representation of the project, ideal for parsing and processing with XML tools.
 
 ## Examples
 
-1. Compile the current directory to the default output file:
+1. Compile the current directory to the default output file (project_name.md):
    ```
    python contextforge.py
    ```
@@ -130,7 +133,12 @@ ContextForge supports three output formats:
 
 5. Compile to JSON format with a 2MB max file size:
    ```
-   python contextforge.py -f json -m 2000000 /path/to/project output.json
+   python contextforge.py -f json -m 2000000 /path/to/project
+   ```
+
+6. Compile to XML format:
+   ```
+   python contextforge.py -f xml /path/to/project
    ```
 
 ## Contributing
