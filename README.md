@@ -4,6 +4,8 @@
 
 ContextForge is a powerful and flexible command-line tool designed to compile the contents of a development project into a single, well-structured file. This compiled output is ideal for use as input to large language models (LLMs) like GPT, making it easier to provide comprehensive project context in a single prompt.
 
+<img src="https://github.com/seeschweiler/contextforge/blob/main/contextforge.png" alt="ContextForge in Action" width="500">
+
 As LLMs continue to evolve, we're seeing a significant increase in their context window sizes. This expansion allows these models to process and understand larger amounts of information at once, opening up new possibilities for developers and AI practitioners. ContextForge is at the forefront of this revolution, enabling users to leverage these expanded context windows to their full potential.
 
 With ContextForge, you can now compile your entire project—including code, documentation, and configuration files—into a single, coherent document. This comprehensive compilation allows you to provide LLMs with a complete picture of your project, leading to more accurate and contextually relevant responses. Whether you're seeking code suggestions, architectural advice, or deep project analysis, ContextForge ensures that the LLM has access to all the necessary information.
