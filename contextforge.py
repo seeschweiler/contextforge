@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import tiktoken
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+from pathlib import Path
 
 def get_file_content(file_path):
     """Read and return the content of a file."""
@@ -148,41 +149,60 @@ def load_cfignore(project_path):
 def should_ignore(path, ignore_patterns, output_file, allowed_extensions):
     """Check if a file or directory should be ignored based on .cfignore patterns, output file, and allowed extensions."""
     # Normalize paths for consistent comparison
-    path = os.path.normpath(path)
+    path = Path(path).resolve()
     if output_file:
-        output_file = os.path.normpath(output_file)
+        output_file = Path(output_file).resolve()
 
     # Check if the path is the output file
-    if output_file and os.path.exists(output_file) and os.path.samefile(path, output_file):
+    if output_file and path.exists() and path.samefile(output_file):
         return True
     
     # If the output file doesn't exist yet, compare the normalized paths
-    if output_file and os.path.abspath(path) == os.path.abspath(output_file):
+    if output_file and path == output_file:
         return True
     
     # Get the relative path from the project root
-    rel_path = os.path.relpath(path, start=os.getcwd())
+    rel_path = path.relative_to(Path.cwd())
     
-    # Check if the file extension is allowed (if allowed_extensions is specified)
-    if allowed_extensions is not None:
-        if os.path.isfile(path):
-            file_extension = os.path.splitext(path)[1].lstrip('.')
-            if file_extension not in allowed_extensions:
+    for pattern in ignore_patterns:
+        # Remove leading and trailing whitespace and slashes
+        pattern = pattern.strip().strip('/')
+        
+        # Convert pattern to Path object for easier manipulation
+        pattern_path = Path(pattern)
+        
+        # Check if the pattern is meant to match from the root
+        is_root_pattern = pattern.startswith('/')
+        
+        # Create different variations of the path to check against
+        paths_to_check = [
+            str(rel_path),
+            str(path),
+            str(rel_path).lstrip('./'),
+            path.name,
+            *(str(rel_path.relative_to(part)) for part in rel_path.parents if part != Path('.'))
+        ]
+        
+        for check_path in paths_to_check:
+            # For root patterns, only check against the full relative path
+            if is_root_pattern and check_path != str(rel_path).lstrip('./'):
+                continue
+            
+            # Perform the pattern matching
+            if fnmatch.fnmatch(check_path, pattern) or \
+               fnmatch.fnmatch(check_path, f"{pattern}/*") or \
+               (pattern_path.parts and fnmatch.fnmatch(check_path, str(Path('**') / pattern))):
                 return True
-        elif os.path.isdir(path):
+    
+    # If not ignored by patterns, check file extension (if allowed_extensions is specified)
+    if allowed_extensions is not None:
+        if path.is_file():
+            if path.suffix.lstrip('.') not in allowed_extensions:
+                return True
+        elif path.is_dir():
             # Don't ignore directories when filtering by extension
             return False
 
-    for pattern in ignore_patterns:
-        # Normalize the pattern to use forward slashes
-        pattern = pattern.replace('\\', '/')
-        
-        # Check if the pattern matches the full path, relative path, or just the basename
-        if fnmatch.fnmatch(path.replace('\\', '/'), pattern) or \
-           fnmatch.fnmatch(rel_path.replace('\\', '/'), pattern) or \
-           fnmatch.fnmatch(os.path.basename(path), pattern):
-            return True
-    
     return False
 
 def count_tokens(text):
@@ -235,7 +255,7 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
         future_to_file = {}
         for root, dirs, files in os.walk(project_path):
             # Check and remove ignored directories
-            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns, output_file, allowed_extensions)]
+            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns, output_file, None)]
             
             for file in files:
                 total_files += 1
