@@ -27,7 +27,112 @@ def is_binary(file_path):
 def get_language(file_extension):
     """Map file extension to Markdown code block language."""
     extension_map = {
-        # ... (keep the existing extension_map here)
+        # Common languages
+        '.py': 'python',
+        '.js': 'javascript',
+        '.jsx': 'jsx',
+        '.ts': 'typescript',
+        '.tsx': 'tsx',
+        '.html': 'html',
+        '.css': 'css',
+        '.scss': 'scss',
+        '.sass': 'sass',
+        '.less': 'less',
+        '.java': 'java',
+        '.c': 'c',
+        '.cpp': 'cpp',
+        '.cs': 'csharp',
+        '.go': 'go',
+        '.rb': 'ruby',
+        '.php': 'php',
+        '.swift': 'swift',
+        '.kt': 'kotlin',
+        '.rs': 'rust',
+        '.scala': 'scala',
+        
+        # Shell and scripting
+        '.sh': 'bash',
+        '.bash': 'bash',
+        '.zsh': 'zsh',
+        '.fish': 'fish',
+        '.ps1': 'powershell',
+        '.bat': 'batch',
+        '.cmd': 'batch',
+        
+        # Markup and data
+        '.xml': 'xml',
+        '.json': 'json',
+        '.yml': 'yaml',
+        '.yaml': 'yaml',
+        '.toml': 'toml',
+        '.md': 'markdown',
+        '.tex': 'latex',
+        
+        # Database
+        '.sql': 'sql',
+        '.plsql': 'plsql',
+        
+        # Web technologies
+        '.vue': 'vue',
+        '.svelte': 'svelte',
+        '.graphql': 'graphql',
+        
+        # Functional languages
+        '.hs': 'haskell',
+        '.elm': 'elm',
+        '.erl': 'erlang',
+        '.ex': 'elixir',
+        '.exs': 'elixir',
+        '.clj': 'clojure',
+        '.lisp': 'lisp',
+        '.scm': 'scheme',
+        
+        # Other languages
+        '.lua': 'lua',
+        '.pl': 'perl',
+        '.r': 'r',
+        '.dart': 'dart',
+        '.f': 'fortran',
+        '.f90': 'fortran',
+        '.jl': 'julia',
+        '.m': 'matlab',
+        '.mm': 'objectivec',
+        '.vb': 'vbnet',
+        '.groovy': 'groovy',
+        '.tcl': 'tcl',
+        '.asm': 'assembly',
+        '.pas': 'pascal',
+        '.d': 'd',
+        '.nim': 'nim',
+        '.zig': 'zig',
+        '.v': 'v',
+        '.ada': 'ada',
+        '.fs': 'fsharp',
+        '.cob': 'cobol',
+        '.coffee': 'coffeescript',
+        
+        # Configuration files
+        '.ini': 'ini',
+        '.cfg': 'ini',
+        '.conf': 'ini',
+        '.properties': 'properties',
+        
+        # Build and package management
+        '.gradle': 'gradle',
+        '.maven': 'maven',
+        '.ant': 'ant',
+        '.cmake': 'cmake',
+        '.dockerfile': 'dockerfile',
+        '.makefile': 'makefile',
+        '.mk': 'makefile',
+        
+        # Version control
+        '.gitignore': 'gitignore',
+        '.gitattributes': 'gitattributes',
+        
+        # Misc
+        '.log': 'log',
+        '.csv': 'csv'
     }
     return extension_map.get(file_extension.lower(), '')
 
@@ -235,11 +340,14 @@ Examples:
     # Determine the output file name
     if args.output_file is None:
         project_name = os.path.basename(os.path.abspath(args.project_path))
-        args.output_file = f"{project_name}.{args.format}"
+        args.output_file = f"{project_name}.{args.format if args.format != 'markdown' else 'md'}"
     else:
         # Ensure the file extension matches the output format
-        base, _ = os.path.splitext(args.output_file)
-        args.output_file = f"{base}.{args.format}"
+        base, ext = os.path.splitext(args.output_file)
+        if args.format == 'markdown':
+            args.output_file = f"{base}.md"
+        elif ext.lower() != f'.{args.format}':
+            args.output_file = f"{base}.{args.format}"
 
     compile_project(args.project_path, args.output_file, args.format, args.max_file_size)
 
