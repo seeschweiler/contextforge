@@ -147,17 +147,32 @@ def load_cfignore(project_path):
 
 def should_ignore(path, ignore_patterns, output_file):
     """Check if a file or directory should be ignored based on .cfignore patterns and output file."""
+    # Normalize paths for consistent comparison
+    path = os.path.normpath(path)
+    if output_file:
+        output_file = os.path.normpath(output_file)
+
     # Check if the path is the output file
     if output_file and os.path.exists(output_file) and os.path.samefile(path, output_file):
         return True
     
-    # If the output file doesn't exist yet, compare the paths
+    # If the output file doesn't exist yet, compare the normalized paths
     if output_file and os.path.abspath(path) == os.path.abspath(output_file):
         return True
     
+    # Get the relative path from the project root
+    rel_path = os.path.relpath(path, start=os.getcwd())
+    
     for pattern in ignore_patterns:
-        if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(os.path.basename(path), pattern):
+        # Normalize the pattern to use forward slashes
+        pattern = pattern.replace('\\', '/')
+        
+        # Check if the pattern matches the full path, relative path, or just the basename
+        if fnmatch.fnmatch(path.replace('\\', '/'), pattern) or \
+           fnmatch.fnmatch(rel_path.replace('\\', '/'), pattern) or \
+           fnmatch.fnmatch(os.path.basename(path), pattern):
             return True
+    
     return False
 
 def count_tokens(text):
