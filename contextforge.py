@@ -145,8 +145,8 @@ def load_cfignore(project_path):
             ignore_patterns = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     return ignore_patterns
 
-def should_ignore(path, ignore_patterns, output_file):
-    """Check if a file or directory should be ignored based on .cfignore patterns and output file."""
+def should_ignore(path, ignore_patterns, output_file, allowed_extensions):
+    """Check if a file or directory should be ignored based on .cfignore patterns, output file, and allowed extensions."""
     # Normalize paths for consistent comparison
     path = os.path.normpath(path)
     if output_file:
@@ -163,6 +163,16 @@ def should_ignore(path, ignore_patterns, output_file):
     # Get the relative path from the project root
     rel_path = os.path.relpath(path, start=os.getcwd())
     
+    # Check if the file extension is allowed (if allowed_extensions is specified)
+    if allowed_extensions is not None:
+        if os.path.isfile(path):
+            file_extension = os.path.splitext(path)[1].lstrip('.')
+            if file_extension not in allowed_extensions:
+                return True
+        elif os.path.isdir(path):
+            # Don't ignore directories when filtering by extension
+            return False
+
     for pattern in ignore_patterns:
         # Normalize the pattern to use forward slashes
         pattern = pattern.replace('\\', '/')
@@ -182,9 +192,9 @@ def count_tokens(text):
 
 def process_file(file_info):
     """Process a single file and return its content and token count."""
-    file_path, relative_path, ignore_patterns, max_file_size, output_file = file_info
+    file_path, relative_path, ignore_patterns, max_file_size, output_file, allowed_extensions = file_info
     
-    if should_ignore(file_path, ignore_patterns, output_file):
+    if should_ignore(file_path, ignore_patterns, output_file, allowed_extensions):
         return None, 0
     
     if os.path.getsize(file_path) > max_file_size:
@@ -208,7 +218,8 @@ def process_file(file_info):
     
     return content, count_tokens(content)
 
-def compile_project(project_path, output_file, output_format='markdown', max_file_size=1000000):
+
+def compile_project(project_path, output_file, output_format='markdown', max_file_size=1000000, allowed_extensions=None):
     """Compile project files into a single file."""
     ignore_patterns = load_cfignore(project_path)
     
@@ -224,15 +235,15 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
         future_to_file = {}
         for root, dirs, files in os.walk(project_path):
             # Check and remove ignored directories
-            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns, output_file)]
+            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns, output_file, allowed_extensions)]
             
             for file in files:
                 total_files += 1
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, project_path)
                 
-                if not should_ignore(file_path, ignore_patterns, output_file):
-                    future = executor.submit(process_file, (file_path, relative_path, ignore_patterns, max_file_size, output_file))
+                if not should_ignore(file_path, ignore_patterns, output_file, allowed_extensions):
+                    future = executor.submit(process_file, (file_path, relative_path, ignore_patterns, max_file_size, output_file, allowed_extensions))
                     future_to_file[future] = relative_path
                 else:
                     ignored_files += 1
@@ -256,7 +267,8 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
         "processed_files": processed_files,
         "ignored_files": ignored_files,
         "compilation_time": compilation_time,
-        "total_tokens": total_tokens
+        "total_tokens": total_tokens,
+        "allowed_extensions": list(allowed_extensions) if allowed_extensions else "All"
     }
     
     with open(output_file, 'w', encoding='utf-8') as out_file:
@@ -339,8 +351,11 @@ Examples:
   Compile with 500KB max file size:
     %(prog)s -m 500000
 
-  Compile to XML format with 2MB max file size:
-    %(prog)s -f xml -m 2000000 /path/to/project output.xml
+  Compile only Python and JavaScript files:
+    %(prog)s --extensions py,js
+
+  Compile to XML format with 2MB max file size, only including Python files:
+    %(prog)s -f xml -m 2000000 --extensions py /path/to/project output.xml
 
   Get help:
     %(prog)s -h
@@ -350,6 +365,7 @@ Examples:
     parser.add_argument("output_file", nargs='?', default=None, help="Path to the output file (default: project_name.{format})")
     parser.add_argument("-f", "--format", choices=['markdown', 'html', 'json', 'xml'], default='markdown', help="Output format (default: %(default)s)")
     parser.add_argument("-m", "--max-file-size", type=int, default=1000000, help="Maximum file size in bytes to include in compilation (default: %(default)s)")
+    parser.add_argument("--extensions", type=str, default=None, help="Comma-separated list of file extensions to include (e.g., 'py,js,md')")
     args = parser.parse_args()
 
     # Determine the output file name
@@ -364,7 +380,11 @@ Examples:
         elif ext.lower() != f'.{args.format}':
             args.output_file = f"{base}.{args.format}"
 
-    compile_project(args.project_path, args.output_file, args.format, args.max_file_size)
+    # Convert extensions string to a set
+    allowed_extensions = set(args.extensions.split(',')) if args.extensions else None
+
+    compile_project(args.project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
+
 
 if __name__ == "__main__":
     main()
