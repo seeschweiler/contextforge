@@ -10,6 +10,8 @@ As LLMs continue to evolve, we're seeing a significant increase in their context
 
 With ContextForge, you can now compile your entire project—including code, documentation, and configuration files—into a single, coherent document. This comprehensive compilation allows you to provide LLMs with a complete picture of your project, leading to more accurate and contextually relevant responses. Whether you're seeking code suggestions, architectural advice, or deep project analysis, ContextForge ensures that the LLM has access to all the necessary information.
 
+<img src="https://github.com/seeschweiler/contextforge/blob/main/cf_howitworks.png" alt="ContextForge in Action" width="500">
+
 Key benefits of using ContextForge with large context window LLMs include:
 
 1. Holistic Understanding: LLMs can grasp the full scope of your project, including intricate relationships between different components.
