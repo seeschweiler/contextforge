@@ -48,6 +48,7 @@ By bridging the gap between expansive codebases and the growing capabilities of 
 - **Progress Tracking**: Displays a progress bar during compilation.
 - **Smart File Naming**: Automatically uses the project folder name as the default output file name.
 - **Consistent File Extensions**: Ensures the output file extension matches the chosen format.
+- **Watch Mode**: Automatically recompiles the project when file changes are detected.
 
 ## Installation
 
@@ -55,7 +56,7 @@ By bridging the gap between expansive codebases and the growing capabilities of 
 
 2. Clone the ContextForge repository:
    ```
-   git clone https://github.com/yourusername/contextforge.git
+   git clone https://github.com/seeschweiler/contextforge.git
    cd contextforge
    ```
 
@@ -69,7 +70,7 @@ By bridging the gap between expansive codebases and the growing capabilities of 
 The basic usage of ContextForge is as follows:
 
 ```
-python contextforge.py [project_path] [output_file] [-f FORMAT] [-m MAX_FILE_SIZE] [--extensions EXTENSIONS]
+python contextforge.py [project_path] [output_file] [-f FORMAT] [-m MAX_FILE_SIZE] [--extensions EXTENSIONS] [--watch]
 ```
 
 - `project_path`: Path to the project folder (default: current directory)
@@ -77,6 +78,7 @@ python contextforge.py [project_path] [output_file] [-f FORMAT] [-m MAX_FILE_SIZ
 - `-f, --format`: Output format (markdown, html, json, or xml; default: markdown)
 - `-m, --max-file-size`: Maximum file size in bytes to include (default: 1000000)
 - `--extensions`: Comma-separated list of file extensions to include (e.g., 'py,js,md')
+- `--watch`: Run in watch mode, recompiling on file changes
 
 For more information and options, use the help command:
 
@@ -156,6 +158,16 @@ ContextForge supports four output formats:
    ```
    python contextforge.py -f xml -m 2000000 --extensions py /path/to/project output.xml
    ```
+
+9. Run in watch mode, recompiling on file changes:
+   ```
+   python contextforge.py --watch
+   ```
+
+10. Run in watch mode with specific format and extensions:
+    ```
+    python contextforge.py --watch -f html --extensions py,js /path/to/project
+    ```
 
 ## Contributing
 
