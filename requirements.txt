@@ -1,3 +1,4 @@
 markdown2==2.4.3
 tqdm==4.65.0
 tiktoken==0.5.1
+watchdog==3.0.0

@@ -10,6 +10,48 @@ import tiktoken
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from pathlib import Path
+import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+class ContextForgeHandler(FileSystemEventHandler):
+    def __init__(self, project_path, output_file, output_format, max_file_size, allowed_extensions):
+        self.project_path = project_path
+        self.output_file = Path(output_file).resolve()
+        self.output_format = output_format
+        self.max_file_size = max_file_size
+        self.allowed_extensions = allowed_extensions
+        self.last_compile_time = 0
+        self.cooldown = 5  # 5 seconds cooldown
+
+    def on_any_event(self, event):
+        if event.is_directory:
+            return
+
+        # Ignore changes to the output file itself
+        if Path(event.src_path).resolve() == self.output_file:
+            return
+
+        current_time = time.time()
+        if current_time - self.last_compile_time > self.cooldown:
+            if event.event_type in ['created', 'modified', 'deleted']:
+                print(f"Detected change in {event.src_path}. Recompiling...")
+                compile_project(self.project_path, str(self.output_file), self.output_format, 
+                                self.max_file_size, self.allowed_extensions)
+                self.last_compile_time = current_time
+
+def watch_project(project_path, output_file, output_format='markdown', max_file_size=1000000, allowed_extensions=None):
+    event_handler = ContextForgeHandler(project_path, output_file, output_format, max_file_size, allowed_extensions)
+    observer = Observer()
+    observer.schedule(event_handler, project_path, recursive=True)
+    observer.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
 
 def get_file_content(file_path):
     """Read and return the content of a file."""
@@ -154,12 +196,12 @@ def should_ignore(path, ignore_patterns, output_file, allowed_extensions):
         output_file = Path(output_file).resolve()
 
     # Check if the path is the output file
-    if output_file and path.exists() and path.samefile(output_file):
-        return True
-    
-    # If the output file doesn't exist yet, compare the normalized paths
-    if output_file and path == output_file:
-        return True
+    if output_file:
+        if path.exists() and output_file.exists() and path.samefile(output_file):
+            return True
+        # If the output file doesn't exist yet, compare the normalized paths
+        if path == output_file:
+            return True
     
     # Get the relative path from the project root
     rel_path = path.relative_to(Path.cwd())
@@ -377,6 +419,9 @@ Examples:
   Compile to XML format with 2MB max file size, only including Python files:
     %(prog)s -f xml -m 2000000 --extensions py /path/to/project output.xml
 
+  Run in watch mode:
+    %(prog)s --watch    
+
   Get help:
     %(prog)s -h
         """
@@ -386,6 +431,7 @@ Examples:
     parser.add_argument("-f", "--format", choices=['markdown', 'html', 'json', 'xml'], default='markdown', help="Output format (default: %(default)s)")
     parser.add_argument("-m", "--max-file-size", type=int, default=1000000, help="Maximum file size in bytes to include in compilation (default: %(default)s)")
     parser.add_argument("--extensions", type=str, default=None, help="Comma-separated list of file extensions to include (e.g., 'py,js,md')")
+    parser.add_argument("--watch", action="store_true", help="Run in watch mode, recompiling on file changes")
     args = parser.parse_args()
 
     # Determine the output file name
@@ -403,8 +449,11 @@ Examples:
     # Convert extensions string to a set
     allowed_extensions = set(args.extensions.split(',')) if args.extensions else None
 
-    compile_project(args.project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
-
+    if args.watch:
+        print(f"Starting ContextForge in watch mode. Press Ctrl+C to stop.")
+        watch_project(args.project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
+    else:
+        compile_project(args.project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
 
 if __name__ == "__main__":
     main()
