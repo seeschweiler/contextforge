@@ -2,32 +2,20 @@
 
 ## Compilation Metadata
 
-- Compilation Date: 2024-08-05T22:59:40.477597
-- Total Files: 64
-- Processed Files: 58
+- Compilation Date: 2024-08-05T23:04:07.980743
+- Total Files: 63
+- Processed Files: 57
 - Ignored Files: 6
-- Compilation Time: 3.71 seconds
-- Total Tokens: 168213
+- Compilation Time: 1.24 seconds
+- Total Tokens: 168149
 
 ## File Contents
 
-## File: .cfignore
+## File: memory/__init__.py
 
-Location: `/Users/heidornj/Code/aider/mypalclaude/.cfignore`
+Location: `/Users/heidornj/Code/aider/mypalclaude/memory/__init__.py`
 
-```
-.aider*
-.venv
-.vscode
-.env
-
-
-__pycache__/
-.conda
-.cache/
-.git
-*.log
-file_timestamps.json
+```python
 
 ```
 
@@ -51,25 +39,16 @@ file_timestamps.json
 
 ```
 
-## File: requirements.txt
+## File: mypalclaude.toml
 
-Location: `/Users/heidornj/Code/aider/mypalclaude/requirements.txt`
+Location: `/Users/heidornj/Code/aider/mypalclaude/mypalclaude.toml`
 
-```
-discord.py
-discord.py[voice]
-python-dotenv
-redis
-redisvl
-neo4j
-pyautogen
-numpy
-openai
-PyNaCl
-rich
-pytest
-click
-prompt_toolkit==3.0.38
+```toml
+[MEMORY]
+last_file_path = /home/heidornj/workspaces/mypalclaude/docs/Claude-My Pal Claude.txt
+last_main_choice = !exit
+last_discord_choice = 1
+
 
 ```
 
@@ -104,6 +83,28 @@ NEO4J_PASSWORD=your_neo4j_password_here
 
 # Optional: Add any additional configuration variables below
 # EXAMPLE_VARIABLE=example_value
+
+```
+
+## File: requirements.txt
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/requirements.txt`
+
+```
+discord.py
+discord.py[voice]
+python-dotenv
+redis
+redisvl
+neo4j
+pyautogen
+numpy
+openai
+PyNaCl
+rich
+pytest
+click
+prompt_toolkit==3.0.38
 
 ```
 
@@ -159,381 +160,6 @@ def wipe_databases():
 if __name__ == '__main__':
     cli()
 
-```
-
-## File: memory/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/memory/__init__.py`
-
-```python
-
-```
-
-## File: mypalclaude.toml
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/mypalclaude.toml`
-
-```toml
-[MEMORY]
-last_file_path = /home/heidornj/workspaces/mypalclaude/docs/Claude-My Pal Claude.txt
-last_main_choice = !exit
-last_discord_choice = 1
-
-
-```
-
-## File: main.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/main.py`
-
-```python
-# main.py
-
-import logging
-import asyncio
-from rich.logging import RichHandler
-from rich.console import Console
-from rich.theme import Theme
-from memory.memory_interface import MemoryInterface
-from utils.config import load_config
-from interfaces.cli.cli_interface import run_cli
-from interfaces.discord.discord_bot import run_bot
-from utils.exceptions import ConfigurationException, InterfaceException, MyPalClaudeException, handle_exception
-from memory.db_connections import initialize_db_connections, close_db_connections
-from utils.config import load_config
-from rich.logging import RichHandler
-import signal
-
-
-# Define custom theme for rich
-custom_theme = Theme({
-    "main": "cyan",
-    "memory": "magenta",
-    "bot": "green",
-    "cli": "yellow",
-    "timestamp": "yellow"
-})
-
-console = Console(theme=custom_theme)
-config = load_config()
-
-class CustomFormatter(logging.Formatter):
-    def format(self, record):
-        # Pad the logger name to a fixed width (for example, 25 characters)
-        max_width = 50
-        record.name = record.name[:max_width].ljust(len(record.name))
-        return super().format(record)
-
-# Setup logging configuration
-def configure_logging(level=logging.INFO):
-    console = RichHandler(rich_tracebacks=True, tracebacks_show_locals=True)
-    
-    logging.basicConfig(
-        level=level,
-        format="%(message)+60s (%(name)s)",
-        handlers=[
-            console,
-            logging.FileHandler('./logs/app.log')
-        ]
-    )
-
-    # Apply custom formatter to the handlers
-    formatter = CustomFormatter("%(message)s")
-    for handler in logging.getLogger().handlers:
-        handler.setFormatter(formatter)
-
-logger = logging.getLogger(__name__)
-
-def signal_handler(signum, frame):
-    logger.info(f"Received signal {signum}. Initiating shutdown...")
-    asyncio.get_event_loop().stop()
-
-async def shutdown(discord_task, cli_task):
-    logger.info("Shutting down interfaces...")
-    tasks = [discord_task, cli_task]
-    for task in tasks:
-        if not task.done():
-            task.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
-    logger.info("Interfaces shut down successfully")
-
-async def main():
-    try:
-        logger.info("=== Starting main function ===")
-        
-        # Load configuration
-        logger.info("Loading configuration...")
-        config = load_config()
-        logger.info("Configuration loaded successfully")
-        # Initialize database connections
-        logger.info("Initializing database connections...")
-        initialize_db_connections()
-        logger.info("Database connections initialized successfully")
-        # Initialize memory interface
-        logger.info("Initializing memory interface...")
-        memory = MemoryInterface()
-        logger.info("Memory interface initialized successfully")
-        
-        # Set up signal handlers
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        # Start both CLI and Discord interfaces
-        logger.info("Starting MyPalClaude (CLI and Discord)...")
-        discord_task = asyncio.create_task(run_bot(config, memory))
-        cli_task = asyncio.create_task(run_cli(config, memory))
-        
-        # Wait for both tasks to complete or for a shutdown signal
-        done, pending = await asyncio.wait(
-            [discord_task, cli_task],
-            return_when=asyncio.FIRST_COMPLETED
-        )
-
-        # Initiate shutdown
-        shutdown_task = asyncio.create_task(shutdown(discord_task, cli_task))
-        await shutdown_task
-
-        # Ensure the event loop is stopped
-        loop = asyncio.get_running_loop()
-        loop.stop()
-
-    except MyPalClaudeException as e:
-        handle_exception(e, logger)
-    except Exception as e:
-        handle_exception(Exception("An unexpected error occurred", e), logger)
-    finally:
-        logger.info("Closing database connections...")
-        close_db_connections()
-        logger.info("=== Main function execution completed ===")
-
-if __name__ == "__main__":
-    configure_logging()
-    logger.info("=== Application starting ===")
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if str(e) == 'Event loop stopped before Future completed.':
-            pass
-            #logger.warning("Event loop stopped before Future completed. This is expected during normal shutdown.")
-        else:
-            logger.exception("Unexpected RuntimeError occurred:")
-    except Exception as e:
-        logger.exception("An unexpected error occurred:")
-    finally:
-        logger.info("=== Application exiting ===")
-
-```
-
-## File: memory/learning_component.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/memory/learning_component.py`
-
-```python
-# learning_component.py
-
-from collections import defaultdict
-from typing import List, Dict, Any
-import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
-
-class LearningComponent:
-    def __init__(self, ranking_algorithm):
-        self.ranking_algorithm = ranking_algorithm
-        self.memory_usage = defaultdict(int)
-        self.query_contexts = defaultdict(lambda: defaultdict(int))
-        self.context_weights = {}
-        self.baseline_weights = self.ranking_algorithm.weights.copy()
-
-    def record_retrieval(self, query: str, results: List[Dict[str, Any]]):
-        context = self.extract_context(query)
-        for result in results:
-            memory_id = result['id']
-            self.memory_usage[memory_id] += 1
-            self.query_contexts[context][memory_id] += 1
-
-    def record_new_memory(self, memory_id: str):
-        self.memory_usage[memory_id] = 0
-
-    def update_ranking_weights(self):
-        total_usage = sum(self.memory_usage.values())
-        if total_usage == 0:
-            logger.warning("No memory usage data available for updating weights.")
-            return
-
-        usage_frequencies = np.array(list(self.memory_usage.values()))
-        new_weights = {
-            'usage_frequency': np.mean(usage_frequencies / total_usage) if usage_frequencies.size > 0 else 0,
-            'recency': 1 / (1 + np.max(usage_frequencies)) if usage_frequencies.size > 0 else 0
-        }
-
-        logger.info(f"Updating ranking weights: {new_weights}")
-        self.ranking_algorithm.update_weights(new_weights)
-
-    def calculate_global_weights(self) -> Dict[str, float]:
-        total_usage = sum(self.memory_usage.values())
-        if total_usage == 0:
-            return self.baseline_weights.copy()
-        
-        weights = {
-            'usage_frequency': sum(freq / total_usage for freq in self.memory_usage.values()) / len(self.memory_usage),
-            'recency': 1 / (1 + max(self.memory_usage.values()))  # Higher usage implies more recent
-        }
-        
-        # Normalize weights
-        total_weight = sum(weights.values())
-        return {k: v / total_weight for k, v in weights.items()}
-
-    def calculate_context_weights(self) -> Dict[str, Dict[str, float]]:
-        context_weights = {}
-        for context, memories in self.query_contexts.items():
-            total_usage = sum(memories.values())
-            if total_usage == 0:
-                continue
-            
-            weights = {
-                'usage_frequency': sum(freq / total_usage for freq in memories.values()) / len(memories),
-                'recency': 1 / (1 + max(memories.values()))
-            }
-            
-            # Normalize weights
-            total_weight = sum(weights.values())
-            context_weights[context] = {k: v / total_weight for k, v in weights.items()}
-        
-        return context_weights
-
-    def extract_context(self, query: str) -> str:
-        # This is a simple context extraction. You might want to use NLP techniques for better context understanding
-        return ' '.join(query.lower().split()[:3])
-
-    def reset_to_baseline(self):
-        self.memory_usage.clear()
-        self.query_contexts.clear()
-        self.context_weights.clear()
-        self.ranking_algorithm.weights = self.baseline_weights.copy()
-        logger.info("Reset learning component to baseline")
-
-    def analyze_usage_patterns(self) -> Dict[str, Any]:
-        total_usage = sum(self.memory_usage.values())
-        if total_usage == 0:
-            return {}
-        
-        most_used = max(self.memory_usage, key=self.memory_usage.get)
-        least_used = min(self.memory_usage, key=self.memory_usage.get)
-        
-        return {
-            "total_usage": total_usage,
-            "unique_memories": len(self.memory_usage),
-            "most_used_memory": {"id": most_used, "count": self.memory_usage[most_used]},
-            "least_used_memory": {"id": least_used, "count": self.memory_usage[least_used]},
-            "average_usage": total_usage / len(self.memory_usage),
-            "context_diversity": len(self.query_contexts)
-        }
-
-    def get_memory_importance(self, memory_id: str) -> float:
-        total_usage = sum(self.memory_usage.values())
-        if total_usage == 0:
-            return 0
-        return self.memory_usage[memory_id] / total_usage
-
-    def suggest_weight_adjustments(self) -> Dict[str, float]:
-        usage_patterns = self.analyze_usage_patterns()
-        suggestions = {}
-        
-        if usage_patterns.get("average_usage", 0) > 10:
-            suggestions['usage_frequency'] = min(self.ranking_algorithm.weights['usage_frequency'] * 1.1, 1.0)
-        
-        if usage_patterns.get("context_diversity", 0) > len(self.memory_usage) / 2:
-            suggestions['graph_relevance'] = min(self.ranking_algorithm.weights['graph_relevance'] * 1.1, 1.0)
-        
-        return suggestions
-
-    def adaptive_learning_rate(self) -> float:
-        # Implement an adaptive learning rate based on the system's performance
-        # This is a placeholder implementation
-        return 0.1  # Default learning rate
-
-    def export_learning_state(self) -> Dict[str, Any]:
-        return {
-            "memory_usage": dict(self.memory_usage),
-            "query_contexts": dict(self.query_contexts),
-            "context_weights": self.context_weights,
-            "current_weights": self.ranking_algorithm.weights
-        }
-
-    def import_learning_state(self, state: Dict[str, Any]):
-        self.memory_usage = defaultdict(int, state.get("memory_usage", {}))
-        self.query_contexts = defaultdict(lambda: defaultdict(int), state.get("query_contexts", {}))
-        self.context_weights = state.get("context_weights", {})
-        if "current_weights" in state:
-            self.ranking_algorithm.update_weights(state["current_weights"])
-        logger.info("Imported learning state")
-
-# Additional methods can be added here as needed
-```
-
-## File: memory/vector_operations.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/memory/vector_operations.py`
-
-```python
-# vector_operations.py
-
-import numpy as np
-from openai import OpenAI
-import os
-from dotenv import load_dotenv
-from redisvl.query import VectorQuery
-from redisvl.index import SearchIndex
-import logging
-import uuid
-
-# Load environment variables
-load_dotenv()
-
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-logger = logging.getLogger(__name__)
-
-def generate_embedding(text):
-    response = client.embeddings.create(
-        input=text,
-        model="text-embedding-3-small"
-    )
-    embedding = np.array(response.data[0].embedding)
-    return embedding
-
-def store_embedding(search_index, content, embedding, metadata):
-    try:
-        # Generate a unique identifier
-        memory_id = str(uuid.uuid4())
-        vector_id = f"chat_vector:{memory_id}"
-        
-        search_index.load([{
-            'id': vector_id,
-            'content': content,
-            'embedding': embedding.astype(np.float32).tobytes(),
-            'timestamp': metadata['utc_timestamp'],
-            'user_id': metadata.get('user_id', 'unknown'),
-            'memory_id': memory_id  # Store the memory_id in the index for reference
-        }])
-        logger.info(f"Embedding stored successfully with key: {vector_id}")
-        return memory_id
-    except Exception as e:
-        logger.error(f"Failed to store embedding: {e}")
-        raise  # Re-raise the exception to be caught by the calling function
-
-def similarity_search(search_index, query_embedding, limit):
-    query = VectorQuery(
-        vector=query_embedding,
-        vector_field_name="embedding",
-        return_fields=["content", "id"],
-        num_results=limit
-    )
-    results = search_index.query(query)
-    return [{"id": r['id'], "content": r['content'], "score": r['vector_distance']} for r in results]
 ```
 
 ## File: README.md
@@ -695,6 +321,349 @@ class AdaptiveRankingAlgorithm:
             self.weights = {k: v / total for k, v in self.weights.items()}
         
         logger.info(f"Updated weights: {self.weights}")
+```
+
+## File: memory/vector_operations.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/memory/vector_operations.py`
+
+```python
+# vector_operations.py
+
+import numpy as np
+from openai import OpenAI
+import os
+from dotenv import load_dotenv
+from redisvl.query import VectorQuery
+from redisvl.index import SearchIndex
+import logging
+import uuid
+
+# Load environment variables
+load_dotenv()
+
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+logger = logging.getLogger(__name__)
+
+def generate_embedding(text):
+    response = client.embeddings.create(
+        input=text,
+        model="text-embedding-3-small"
+    )
+    embedding = np.array(response.data[0].embedding)
+    return embedding
+
+def store_embedding(search_index, content, embedding, metadata):
+    try:
+        # Generate a unique identifier
+        memory_id = str(uuid.uuid4())
+        vector_id = f"chat_vector:{memory_id}"
+        
+        search_index.load([{
+            'id': vector_id,
+            'content': content,
+            'embedding': embedding.astype(np.float32).tobytes(),
+            'timestamp': metadata['utc_timestamp'],
+            'user_id': metadata.get('user_id', 'unknown'),
+            'memory_id': memory_id  # Store the memory_id in the index for reference
+        }])
+        logger.info(f"Embedding stored successfully with key: {vector_id}")
+        return memory_id
+    except Exception as e:
+        logger.error(f"Failed to store embedding: {e}")
+        raise  # Re-raise the exception to be caught by the calling function
+
+def similarity_search(search_index, query_embedding, limit):
+    query = VectorQuery(
+        vector=query_embedding,
+        vector_field_name="embedding",
+        return_fields=["content", "id"],
+        num_results=limit
+    )
+    results = search_index.query(query)
+    return [{"id": r['id'], "content": r['content'], "score": r['vector_distance']} for r in results]
+```
+
+## File: main.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/main.py`
+
+```python
+# main.py
+
+import logging
+import asyncio
+from rich.logging import RichHandler
+from rich.console import Console
+from rich.theme import Theme
+from memory.memory_interface import MemoryInterface
+from utils.config import load_config
+from interfaces.cli.cli_interface import run_cli
+from interfaces.discord.discord_bot import run_bot
+from utils.exceptions import ConfigurationException, InterfaceException, MyPalClaudeException, handle_exception
+from memory.db_connections import initialize_db_connections, close_db_connections
+from utils.config import load_config
+from rich.logging import RichHandler
+import signal
+
+
+# Define custom theme for rich
+custom_theme = Theme({
+    "main": "cyan",
+    "memory": "magenta",
+    "bot": "green",
+    "cli": "yellow",
+    "timestamp": "yellow"
+})
+
+console = Console(theme=custom_theme)
+config = load_config()
+
+class CustomFormatter(logging.Formatter):
+    def format(self, record):
+        # Pad the logger name to a fixed width (for example, 25 characters)
+        max_width = 50
+        record.name = record.name[:max_width].ljust(len(record.name))
+        return super().format(record)
+
+# Setup logging configuration
+def configure_logging(level=logging.INFO):
+    console = RichHandler(rich_tracebacks=True, tracebacks_show_locals=True)
+    
+    logging.basicConfig(
+        level=level,
+        format="%(message)+60s (%(name)s)",
+        handlers=[
+            console,
+            logging.FileHandler('./logs/app.log')
+        ]
+    )
+
+    # Apply custom formatter to the handlers
+    formatter = CustomFormatter("%(message)s")
+    for handler in logging.getLogger().handlers:
+        handler.setFormatter(formatter)
+
+logger = logging.getLogger(__name__)
+
+def signal_handler(signum, frame):
+    logger.info(f"Received signal {signum}. Initiating shutdown...")
+    asyncio.get_event_loop().stop()
+
+async def shutdown(discord_task, cli_task):
+    logger.info("Shutting down interfaces...")
+    tasks = [discord_task, cli_task]
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    logger.info("Interfaces shut down successfully")
+
+async def main():
+    try:
+        logger.info("=== Starting main function ===")
+        
+        # Load configuration
+        logger.info("Loading configuration...")
+        config = load_config()
+        logger.info("Configuration loaded successfully")
+        # Initialize database connections
+        logger.info("Initializing database connections...")
+        initialize_db_connections()
+        logger.info("Database connections initialized successfully")
+        # Initialize memory interface
+        logger.info("Initializing memory interface...")
+        memory = MemoryInterface()
+        logger.info("Memory interface initialized successfully")
+        
+        # Set up signal handlers
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        # Start both CLI and Discord interfaces
+        logger.info("Starting MyPalClaude (CLI and Discord)...")
+        discord_task = asyncio.create_task(run_bot(config, memory))
+        cli_task = asyncio.create_task(run_cli(config, memory))
+        
+        # Wait for both tasks to complete or for a shutdown signal
+        done, pending = await asyncio.wait(
+            [discord_task, cli_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+
+        # Initiate shutdown
+        shutdown_task = asyncio.create_task(shutdown(discord_task, cli_task))
+        await shutdown_task
+
+        # Ensure the event loop is stopped
+        loop = asyncio.get_running_loop()
+        loop.stop()
+
+    except MyPalClaudeException as e:
+        handle_exception(e, logger)
+    except Exception as e:
+        handle_exception(Exception("An unexpected error occurred", e), logger)
+    finally:
+        logger.info("Closing database connections...")
+        close_db_connections()
+        logger.info("=== Main function execution completed ===")
+
+if __name__ == "__main__":
+    configure_logging()
+    logger.info("=== Application starting ===")
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        if str(e) == 'Event loop stopped before Future completed.':
+            pass
+            #logger.warning("Event loop stopped before Future completed. This is expected during normal shutdown.")
+        else:
+            logger.exception("Unexpected RuntimeError occurred:")
+    except Exception as e:
+        logger.exception("An unexpected error occurred:")
+    finally:
+        logger.info("=== Application exiting ===")
+
+```
+
+## File: memory/graph_generator.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/memory/graph_generator.py`
+
+```python
+# graph_generator.py
+import os
+import json
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+api_key = os.getenv('OPENROUTER_API_KEY')
+model_name = 'mistralai/mistral-nemo'
+api_url = 'https://openrouter.ai/api/v1/chat/completions'
+
+headers = {
+    "Authorization": f"Bearer {api_key}",
+    "Content-Type": "application/json",
+    "HTTP-Referer": "https://jorsh.app/",
+    "X-Title": "MyPalClaude-GraphGenerator"
+}
+
+def generate_neo4j_data(prompt):
+   function_call = {
+        "name": "generate_neo4j_data",
+        "description": "Generate Neo4j-compatible data from a given conversation",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string"},
+                            "content": {"type": "string"}
+                        },
+                        "required": ["label", "content"]
+                    }
+                },
+                "relationships": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string"},
+                            "from": {"type": "string"},
+                            "to": {"type": "string"},
+                            "content": {"type": "string"}
+                        },
+                        "required": ["type", "from", "to", "content"]
+                    }
+                }
+            },
+            "required": ["nodes", "relationships"]
+        }
+    }
+
+   data = {
+      "model": model_name,
+      "messages": [{"role": "user", "content": prompt}],
+      "functions": [function_call],
+      "function_call": {"name": "generate_neo4j_data"},
+      "temperature": 0.7,
+      "top_p": 1,
+      "n": 1
+   }
+
+   response = requests.post(api_url, headers=headers, json=data)
+   response_json = response.json()
+
+   function_call = response_json['choices'][0]['message'].get('function_call', {})
+   if function_call and 'arguments' in function_call:
+      return json.loads(function_call['arguments'])
+   else:
+      return response_json['choices'][0]['message']['content'].strip()
+   
+prompt_text = """Given a conversation or prompt, extract and structure the information into a Neo4j-compatible format for a memory system. 
+Follow these guidelines:
+
+1. Nodes:
+   - Identify key entities: concepts, people, places, events, or abstract ideas.
+   - Group related ideas under a common node when appropriate.
+   - Each node should have a label and content.
+   - Keep node content concise (1-4 words).
+
+2. Relationships:
+   - Identify connections between nodes.
+   - Each relationship should have a type, from, to, and content.
+   - Keep relationship content concise (1-4 words).
+
+3. Formatting:
+   - Use ALL_CAPS for node labels and relationship types.
+   - Use Title Case for node and relationship content.
+
+4. Output:
+   - Provide only a JSON object with "nodes" and "relationships" arrays. Do not include any other information. Do not attempt to render the content for display.
+   - Each node: {"label": "LABEL", "content": "Content"}
+   - Each relationship: {"type": "TYPE", "from": "Node1 Content", "to": "Node2 Content", "content": "Content"}
+
+5. JSON Validity:
+   - Ensure all JSON is properly formatted and complete.
+   - Double-check that all opening brackets, braces, and quotes have matching closing ones.
+   - Verify that all list items and object properties are correctly separated by commas.
+
+6. Self-Check:
+   - After generating the JSON, perform a self-check to ensure its validity.
+   - Verify the response only contains a JSON object with "nodes" and "relationships" arrays.
+   - If any errors are found, regenerate the entire JSON object correctly.
+
+Example input:
+"John loves to read science fiction books and often discusses them with his friend Sarah, who prefers mystery novels."
+
+Example output:
+{
+  "nodes": [
+    {"label": "PERSON", "content": "John"},
+    {"label": "PERSON", "content": "Sarah"},
+    {"label": "INTEREST", "content": "Reading"},
+    {"label": "GENRE", "content": "Science Fiction"},
+    {"label": "GENRE", "content": "Mystery"}
+  ],
+  "relationships": [
+    {"type": "ENJOYS", "from": "John", "to": "Reading", "content": "Loves To"},
+    {"type": "PREFERS", "from": "John", "to": "Science Fiction", "content": "Favorite Genre"},
+    {"type": "DISCUSSES", "from": "John", "to": "Sarah", "content": "Book Discussions"},
+    {"type": "PREFERS", "from": "Sarah", "to": "Mystery", "content": "Favorite Genre"}
+  ]
+}
+
+After generating the JSON, confirm its validity before submitting. If any errors are found, regenerate the entire JSON object correctly.
+
+Now, translate the following into the specified JSON format, ensuring the JSON is complete and valid:
+"""
 ```
 
 ## File: memory/db_connections.py
@@ -873,6 +842,281 @@ def wipe_all_dbs():
     redis_wiped = wipe_redis_db()
     neo4j_wiped = wipe_neo4j_db()
     return redis_wiped and neo4j_wiped
+```
+
+## File: memory/graph_operations.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/memory/graph_operations.py`
+
+```python
+from neo4j import GraphDatabase
+from typing import List, Dict, Any
+import requests
+import json
+import os
+
+class GraphOperations:
+    @staticmethod
+    def call_gpt4_mini(prompt: str) -> str:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY environment variable is not set")
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "model": "openai/gpt-4-0613",
+            "messages": [{"role": "user", "content": prompt}]
+        }
+
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
+
+    @staticmethod
+    def analyze_content_for_labels(content: str) -> List[str]:
+        prompt = f"Analyze the following content and provide a list of relevant labels or categories:\n\n{content}\n\nLabels:"
+        response = GraphOperations.call_gpt4_mini(prompt)
+        labels = [label.strip() for label in response.split(',')]
+        return list(set(labels))  # Remove duplicates
+
+    @staticmethod
+    def infer_relationship_type(source_content: str, target_content: str) -> str:
+        prompt = f"Analyze the relationship between the following two pieces of content and provide a single word or short phrase describing their relationship:\n\nContent 1: {source_content}\n\nContent 2: {target_content}\n\nRelationship:"
+        response = GraphOperations.call_gpt4_mini(prompt)
+        return response.strip().upper().replace(' ', '_')
+    def __init__(self, neo4j_driver):
+        self.driver = neo4j_driver
+
+    def create_node(self, content: str, additional_properties: Dict[str, Any] = None) -> str:
+        labels = self.analyze_content_for_labels(content)
+        properties = {"content": content}
+        if additional_properties:
+            properties.update(additional_properties)
+        
+        label_string = ':'.join(labels) if labels else 'Content'
+        
+        with self.driver.session() as session:
+            result = session.run(
+                f"CREATE (n:{label_string} $props) RETURN id(n) as node_id",
+                props=properties
+            )
+            return result.single()["node_id"]
+
+    def create_relationship(self, start_node_id: str, end_node_id: str, properties: Dict[str, Any] = None):
+        with self.driver.session() as session:
+            # Fetch the content of both nodes
+            start_node = session.run("MATCH (n) WHERE id(n) = $id RETURN n.content as content", id=start_node_id).single()
+            end_node = session.run("MATCH (n) WHERE id(n) = $id RETURN n.content as content", id=end_node_id).single()
+            
+            if start_node and end_node:
+                rel_type = self.infer_relationship_type(start_node["content"], end_node["content"])
+                
+                session.run(
+                    f"""
+                    MATCH (a), (b)
+                    WHERE id(a) = $start_id AND id(b) = $end_id
+                    CREATE (a)-[r:{rel_type} $props]->(b)
+                    RETURN type(r)
+                    """,
+                    start_id=start_node_id,
+                    end_id=end_node_id,
+                    props=properties or {}
+                )
+            else:
+                raise ValueError("One or both nodes not found")
+
+    def get_related_nodes(self, node_id: str, relationship_type: str = None, direction: str = "BOTH") -> List[Dict[str, Any]]:
+        direction_query = {
+            "OUTGOING": "()-[r]->",
+            "INCOMING": "<-[r]-",
+            "BOTH": "-[r]-"
+        }.get(direction.upper(), "-[r]-")
+        
+        rel_type_query = f" AND type(r) = '{relationship_type}'" if relationship_type else ""
+        
+        with self.driver.session() as session:
+            result = session.run(
+                f"""
+                MATCH (n){direction_query}(related)
+                WHERE id(n) = $node_id{rel_type_query}
+                RETURN related, type(r) AS relationship_type
+                """,
+                node_id=node_id
+            )
+            return [{"node": dict(record["related"]), "relationship_type": record["relationship_type"]} for record in result]
+
+    def find_paths(self, start_node_id: str, end_node_id: str, max_depth: int = 4) -> List[List[Dict[str, Any]]]:
+        with self.driver.session() as session:
+            result = session.run(
+                """
+                MATCH path = shortestPath((start)-[*1..{max_depth}]-(end))
+                WHERE id(start) = $start_id AND id(end) = $end_id
+                RETURN [node in nodes(path) | {id: id(node), labels: labels(node), properties: properties(node)}] AS path_nodes,
+                       [rel in relationships(path) | {type: type(rel), properties: properties(rel)}] AS path_rels
+                """,
+                start_id=start_node_id, end_id=end_node_id, max_depth=max_depth
+            )
+            paths = []
+            for record in result:
+                path = []
+                for node, rel in zip(record["path_nodes"], record["path_rels"] + [None]):
+                    path.append({"node": node, "relationship": rel})
+                paths.append(path)
+            return paths
+
+```
+
+## File: memory/learning_component.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/memory/learning_component.py`
+
+```python
+# learning_component.py
+
+from collections import defaultdict
+from typing import List, Dict, Any
+import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
+
+class LearningComponent:
+    def __init__(self, ranking_algorithm):
+        self.ranking_algorithm = ranking_algorithm
+        self.memory_usage = defaultdict(int)
+        self.query_contexts = defaultdict(lambda: defaultdict(int))
+        self.context_weights = {}
+        self.baseline_weights = self.ranking_algorithm.weights.copy()
+
+    def record_retrieval(self, query: str, results: List[Dict[str, Any]]):
+        context = self.extract_context(query)
+        for result in results:
+            memory_id = result['id']
+            self.memory_usage[memory_id] += 1
+            self.query_contexts[context][memory_id] += 1
+
+    def record_new_memory(self, memory_id: str):
+        self.memory_usage[memory_id] = 0
+
+    def update_ranking_weights(self):
+        total_usage = sum(self.memory_usage.values())
+        if total_usage == 0:
+            logger.warning("No memory usage data available for updating weights.")
+            return
+
+        usage_frequencies = np.array(list(self.memory_usage.values()))
+        new_weights = {
+            'usage_frequency': np.mean(usage_frequencies / total_usage) if usage_frequencies.size > 0 else 0,
+            'recency': 1 / (1 + np.max(usage_frequencies)) if usage_frequencies.size > 0 else 0
+        }
+
+        logger.info(f"Updating ranking weights: {new_weights}")
+        self.ranking_algorithm.update_weights(new_weights)
+
+    def calculate_global_weights(self) -> Dict[str, float]:
+        total_usage = sum(self.memory_usage.values())
+        if total_usage == 0:
+            return self.baseline_weights.copy()
+        
+        weights = {
+            'usage_frequency': sum(freq / total_usage for freq in self.memory_usage.values()) / len(self.memory_usage),
+            'recency': 1 / (1 + max(self.memory_usage.values()))  # Higher usage implies more recent
+        }
+        
+        # Normalize weights
+        total_weight = sum(weights.values())
+        return {k: v / total_weight for k, v in weights.items()}
+
+    def calculate_context_weights(self) -> Dict[str, Dict[str, float]]:
+        context_weights = {}
+        for context, memories in self.query_contexts.items():
+            total_usage = sum(memories.values())
+            if total_usage == 0:
+                continue
+            
+            weights = {
+                'usage_frequency': sum(freq / total_usage for freq in memories.values()) / len(memories),
+                'recency': 1 / (1 + max(memories.values()))
+            }
+            
+            # Normalize weights
+            total_weight = sum(weights.values())
+            context_weights[context] = {k: v / total_weight for k, v in weights.items()}
+        
+        return context_weights
+
+    def extract_context(self, query: str) -> str:
+        # This is a simple context extraction. You might want to use NLP techniques for better context understanding
+        return ' '.join(query.lower().split()[:3])
+
+    def reset_to_baseline(self):
+        self.memory_usage.clear()
+        self.query_contexts.clear()
+        self.context_weights.clear()
+        self.ranking_algorithm.weights = self.baseline_weights.copy()
+        logger.info("Reset learning component to baseline")
+
+    def analyze_usage_patterns(self) -> Dict[str, Any]:
+        total_usage = sum(self.memory_usage.values())
+        if total_usage == 0:
+            return {}
+        
+        most_used = max(self.memory_usage, key=self.memory_usage.get)
+        least_used = min(self.memory_usage, key=self.memory_usage.get)
+        
+        return {
+            "total_usage": total_usage,
+            "unique_memories": len(self.memory_usage),
+            "most_used_memory": {"id": most_used, "count": self.memory_usage[most_used]},
+            "least_used_memory": {"id": least_used, "count": self.memory_usage[least_used]},
+            "average_usage": total_usage / len(self.memory_usage),
+            "context_diversity": len(self.query_contexts)
+        }
+
+    def get_memory_importance(self, memory_id: str) -> float:
+        total_usage = sum(self.memory_usage.values())
+        if total_usage == 0:
+            return 0
+        return self.memory_usage[memory_id] / total_usage
+
+    def suggest_weight_adjustments(self) -> Dict[str, float]:
+        usage_patterns = self.analyze_usage_patterns()
+        suggestions = {}
+        
+        if usage_patterns.get("average_usage", 0) > 10:
+            suggestions['usage_frequency'] = min(self.ranking_algorithm.weights['usage_frequency'] * 1.1, 1.0)
+        
+        if usage_patterns.get("context_diversity", 0) > len(self.memory_usage) / 2:
+            suggestions['graph_relevance'] = min(self.ranking_algorithm.weights['graph_relevance'] * 1.1, 1.0)
+        
+        return suggestions
+
+    def adaptive_learning_rate(self) -> float:
+        # Implement an adaptive learning rate based on the system's performance
+        # This is a placeholder implementation
+        return 0.1  # Default learning rate
+
+    def export_learning_state(self) -> Dict[str, Any]:
+        return {
+            "memory_usage": dict(self.memory_usage),
+            "query_contexts": dict(self.query_contexts),
+            "context_weights": self.context_weights,
+            "current_weights": self.ranking_algorithm.weights
+        }
+
+    def import_learning_state(self, state: Dict[str, Any]):
+        self.memory_usage = defaultdict(int, state.get("memory_usage", {}))
+        self.query_contexts = defaultdict(lambda: defaultdict(int), state.get("query_contexts", {}))
+        self.context_weights = state.get("context_weights", {})
+        if "current_weights" in state:
+            self.ranking_algorithm.update_weights(state["current_weights"])
+        logger.info("Imported learning state")
+
+# Additional methods can be added here as needed
 ```
 
 ## File: tools/hot_reload.py
@@ -1567,161 +1811,82 @@ if __name__ == "__main__":
 
 ```
 
-## File: memory/graph_generator.py
+## File: .pytest_cache/.gitignore
 
-Location: `/Users/heidornj/Code/aider/mypalclaude/memory/graph_generator.py`
+Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/.gitignore`
 
-```python
-# graph_generator.py
-import os
-import json
-import requests
-from dotenv import load_dotenv
+```
+# Created by pytest automatically.
+*
 
-load_dotenv()
+```
 
-api_key = os.getenv('OPENROUTER_API_KEY')
-model_name = 'mistralai/mistral-nemo'
-api_url = 'https://openrouter.ai/api/v1/chat/completions'
+## File: .pytest_cache/v/cache/lastfailed
 
-headers = {
-    "Authorization": f"Bearer {api_key}",
-    "Content-Type": "application/json",
-    "HTTP-Referer": "https://jorsh.app/",
-    "X-Title": "MyPalClaude-GraphGenerator"
-}
+Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/v/cache/lastfailed`
 
-def generate_neo4j_data(prompt):
-   function_call = {
-        "name": "generate_neo4j_data",
-        "description": "Generate Neo4j-compatible data from a given conversation",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "nodes": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "label": {"type": "string"},
-                            "content": {"type": "string"}
-                        },
-                        "required": ["label", "content"]
-                    }
-                },
-                "relationships": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "type": {"type": "string"},
-                            "from": {"type": "string"},
-                            "to": {"type": "string"},
-                            "content": {"type": "string"}
-                        },
-                        "required": ["type", "from", "to", "content"]
-                    }
-                }
-            },
-            "required": ["nodes", "relationships"]
-        }
-    }
-
-   data = {
-      "model": model_name,
-      "messages": [{"role": "user", "content": prompt}],
-      "functions": [function_call],
-      "function_call": {"name": "generate_neo4j_data"},
-      "temperature": 0.7,
-      "top_p": 1,
-      "n": 1
-   }
-
-   response = requests.post(api_url, headers=headers, json=data)
-   response_json = response.json()
-
-   function_call = response_json['choices'][0]['message'].get('function_call', {})
-   if function_call and 'arguments' in function_call:
-      return json.loads(function_call['arguments'])
-   else:
-      return response_json['choices'][0]['message']['content'].strip()
-   
-prompt_text = """Given a conversation or prompt, extract and structure the information into a Neo4j-compatible format for a memory system. 
-Follow these guidelines:
-
-1. Nodes:
-   - Identify key entities: concepts, people, places, events, or abstract ideas.
-   - Group related ideas under a common node when appropriate.
-   - Each node should have a label and content.
-   - Keep node content concise (1-4 words).
-
-2. Relationships:
-   - Identify connections between nodes.
-   - Each relationship should have a type, from, to, and content.
-   - Keep relationship content concise (1-4 words).
-
-3. Formatting:
-   - Use ALL_CAPS for node labels and relationship types.
-   - Use Title Case for node and relationship content.
-
-4. Output:
-   - Provide only a JSON object with "nodes" and "relationships" arrays. Do not include any other information. Do not attempt to render the content for display.
-   - Each node: {"label": "LABEL", "content": "Content"}
-   - Each relationship: {"type": "TYPE", "from": "Node1 Content", "to": "Node2 Content", "content": "Content"}
-
-5. JSON Validity:
-   - Ensure all JSON is properly formatted and complete.
-   - Double-check that all opening brackets, braces, and quotes have matching closing ones.
-   - Verify that all list items and object properties are correctly separated by commas.
-
-6. Self-Check:
-   - After generating the JSON, perform a self-check to ensure its validity.
-   - Verify the response only contains a JSON object with "nodes" and "relationships" arrays.
-   - If any errors are found, regenerate the entire JSON object correctly.
-
-Example input:
-"John loves to read science fiction books and often discusses them with his friend Sarah, who prefers mystery novels."
-
-Example output:
+```
 {
-  "nodes": [
-    {"label": "PERSON", "content": "John"},
-    {"label": "PERSON", "content": "Sarah"},
-    {"label": "INTEREST", "content": "Reading"},
-    {"label": "GENRE", "content": "Science Fiction"},
-    {"label": "GENRE", "content": "Mystery"}
-  ],
-  "relationships": [
-    {"type": "ENJOYS", "from": "John", "to": "Reading", "content": "Loves To"},
-    {"type": "PREFERS", "from": "John", "to": "Science Fiction", "content": "Favorite Genre"},
-    {"type": "DISCUSSES", "from": "John", "to": "Sarah", "content": "Book Discussions"},
-    {"type": "PREFERS", "from": "Sarah", "to": "Mystery", "content": "Favorite Genre"}
-  ]
+  "tests/test_exception_handling.py::TestExceptionHandling::test_handle_unexpected_exception": true,
+  "tests/test_memory_interface_exceptions.py::TestMemoryInterfaceExceptions::test_add_memory_database_exception": true,
+  "tests/test_memory_interface_exceptions.py::TestMemoryInterfaceExceptions::test_retrieve_memory_no_results": true,
+  "tests/test_memory_interface_exceptions.py::TestMemoryInterfaceExceptions::test_retrieve_memory_unexpected_error": true,
+  "tests/test_memory_system_integration.py::test_add_and_retrieve_memory": true,
+  "tests/test_memory_system_integration.py::test_adaptive_ranking": true,
+  "tests/test_memory_system_integration.py::test_context_adaptation": true,
+  "tests/test_memory_system_integration.py::test_memory_persistence": true
 }
-
-After generating the JSON, confirm its validity before submitting. If any errors are found, regenerate the entire JSON object correctly.
-
-Now, translate the following into the specified JSON format, ensuring the JSON is complete and valid:
-"""
 ```
 
-## File: .pytest_cache/CACHEDIR.TAG
+## File: tests/test_memory_interface_exceptions.py
 
-Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/CACHEDIR.TAG`
-
-```
-Signature: 8a477f597d28d172789f06886806bc55
-# This file is a cache directory tag created by pytest.
-# For information about cache directory tags, see:
-#	https://bford.info/cachedir/spec.html
-
-```
-
-## File: tests/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/tests/__init__.py`
+Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_memory_interface_exceptions.py`
 
 ```python
+# tests/test_memory_interface_exceptions.py
+
+import unittest
+from unittest.mock import patch, MagicMock
+from memory.memory_interface import MemoryInterface
+from utils.exceptions import MemoryException, DatabaseException
+
+class TestMemoryInterfaceExceptions(unittest.TestCase):
+
+    def setUp(self):
+        self.memory_interface = MemoryInterface()
+
+    @patch('memory.memory_interface.store_embedding')
+    def test_add_memory_database_exception(self, mock_store_embedding):
+        mock_store_embedding.return_value = False
+        
+        with self.assertRaises(DatabaseException) as context:
+            self.memory_interface.add_memory("Test content")
+        
+        self.assertTrue("Failed to store memory embedding in vector database" in str(context.exception))
+        self.assertEqual(context.exception.error_code, "VDB001")
+
+    @patch('memory.memory_interface.similarity_search')
+    def test_retrieve_memory_no_results(self, mock_similarity_search):
+        mock_similarity_search.return_value = []
+        
+        with self.assertRaises(MemoryException) as context:
+            self.memory_interface.retrieve_memory("Test query")
+        
+        self.assertTrue("No memories found for query" in str(context.exception))
+        self.assertEqual(context.exception.error_code, "MEM002")
+
+    @patch('memory.memory_interface.similarity_search')
+    def test_retrieve_memory_unexpected_error(self, mock_similarity_search):
+        mock_similarity_search.side_effect = Exception("Unexpected error")
+        
+        with self.assertRaises(MemoryException) as context:
+            self.memory_interface.retrieve_memory("Test query")
+        
+        self.assertTrue("Error retrieving memory" in str(context.exception))
+        self.assertEqual(context.exception.error_code, "MEM003")
+
+if __name__ == '__main__':
+    unittest.main()
 
 ```
 
@@ -1770,21 +1935,421 @@ if __name__ == "__main__":
     benchmark_memory_system()
 ```
 
-## File: .pytest_cache/v/cache/lastfailed
+## File: utils/__init__.py
 
-Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/v/cache/lastfailed`
+Location: `/Users/heidornj/Code/aider/mypalclaude/utils/__init__.py`
+
+```python
 
 ```
-{
-  "tests/test_exception_handling.py::TestExceptionHandling::test_handle_unexpected_exception": true,
-  "tests/test_memory_interface_exceptions.py::TestMemoryInterfaceExceptions::test_add_memory_database_exception": true,
-  "tests/test_memory_interface_exceptions.py::TestMemoryInterfaceExceptions::test_retrieve_memory_no_results": true,
-  "tests/test_memory_interface_exceptions.py::TestMemoryInterfaceExceptions::test_retrieve_memory_unexpected_error": true,
-  "tests/test_memory_system_integration.py::test_add_and_retrieve_memory": true,
-  "tests/test_memory_system_integration.py::test_adaptive_ranking": true,
-  "tests/test_memory_system_integration.py::test_context_adaptation": true,
-  "tests/test_memory_system_integration.py::test_memory_persistence": true
-}
+
+## File: tests/test_exception_handling.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_exception_handling.py`
+
+```python
+# tests/test_exception_handling.py
+
+import unittest
+from unittest.mock import patch, MagicMock
+from io import StringIO
+import logging
+from utils.exceptions import (
+    MyPalClaudeException, DatabaseException, MemoryException, 
+    APIException, ConfigurationException, InterfaceException
+)
+from utils.exception_handler import handle_exception
+
+class TestExceptionHandling(unittest.TestCase):
+
+    def setUp(self):
+        self.logger = logging.getLogger('test_logger')
+        self.logger.setLevel(logging.ERROR)
+        self.log_capture = StringIO()
+        handler = logging.StreamHandler(self.log_capture)
+        self.logger.addHandler(handler)
+
+    def test_handle_my_pal_claude_exception(self):
+        exc = MyPalClaudeException("Test error", error_code="TEST001")
+        with patch('utils.exception_handler.console.print') as mock_print:
+            handle_exception(exc, self.logger)
+            mock_print.assert_called_once()
+            self.assertIn("MyPalClaudeException: Test error (Error Code: TEST001)", self.log_capture.getvalue())
+
+    def test_handle_database_exception(self):
+        exc = DatabaseException("Database connection failed", error_code="DB001")
+        with patch('utils.exception_handler.console.print') as mock_print:
+            handle_exception(exc, self.logger)
+            mock_print.assert_called_once()
+            self.assertIn("DatabaseException: Database connection failed (Error Code: DB001)", self.log_capture.getvalue())
+
+    def test_handle_unexpected_exception(self):
+        exc = ValueError("Unexpected error")
+        with patch('utils.exception_handler.console.print') as mock_print:
+            handle_exception(exc, self.logger)
+            mock_print.assert_called_once()
+            self.assertIn("ValueError: Unexpected error", self.log_capture.getvalue())
+
+    # Add more tests for other exception types...
+
+if __name__ == '__main__':
+    unittest.main()
+
+```
+
+## File: .pytest_cache/CACHEDIR.TAG
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/CACHEDIR.TAG`
+
+```
+Signature: 8a477f597d28d172789f06886806bc55
+# This file is a cache directory tag created by pytest.
+# For information about cache directory tags, see:
+#	https://bford.info/cachedir/spec.html
+
+```
+
+## File: utils/config.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/utils/config.py`
+
+```python
+import os
+from dotenv import load_dotenv
+import configparser
+
+def load_config():
+    envconfig = load_dotenv()
+    tomlconfig = setup_config_file()
+    return {**envconfig, **tomlconfig}
+
+def load_dotenv():
+    
+    config = {
+        'DISCORD_TOKEN': os.getenv('DISCORD_TOKEN'),
+        'DISCORD_CHANNEL_ID': int(os.getenv('DISCORD_CHANNEL_ID')),
+        'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),
+        'OPENROUTER_API_KEY': os.getenv('OPENROUTER_API_KEY'),
+        'SUPABASE_HOST': os.getenv('SUPABASE_HOST'),
+        'SUPABASE_DATABASE': os.getenv('SUPABASE_DATABASE'),
+        'SUPABASE_USER': os.getenv('SUPABASE_USER'),
+        'SUPABASE_PASSWORD': os.getenv('SUPABASE_PASSWORD'),
+        'NEO4J_DATABASE': os.getenv('NEO4J_DATABASE'),
+        'NEO4J_URI': os.getenv('NEO4J_URI'),
+        'NEO4J_USER': os.getenv('NEO4J_USER'),
+        'NEO4J_PASSWORD': os.getenv('NEO4J_PASSWORD'),
+        'REDIS_HOST': os.getenv('REDIS_HOST'),
+        'REDIS_PORT': os.getenv('REDIS_PORT'),
+        'REDIS_PASSWORD': os.getenv('REDIS_PASSWORD'),
+        'REDIS_DB': os.getenv('REDIS_DB'),
+        'REDIS_NAME': os.getenv('REDIS_NAME'),
+    }
+    
+    # Validate required configuration
+    required_keys = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_ID', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY',
+                     'REDIS_HOST', 'REDIS_DB', 'REDIS_PASSWORD', 'REDIS_PORT',
+                     'NEO4J_DATABASE','NEO4J_URI', 'NEO4J_USER', 'NEO4J_PASSWORD']
+    
+    for key in required_keys:
+        if not config[key]:
+            raise ValueError(f"Missing required configuration: {key}")
+    
+    return config
+
+def setup_config_file():
+    config = configparser.ConfigParser()
+    config_file = 'mypalclaude.toml'
+
+    # Check if the config file exists
+    if not os.path.exists(config_file):
+        # If the file doesn't exist, create it with default values
+        config['MEMORY'] = {
+            'last_file_path': '',
+            'last_main_choice': '2',
+            'last_discord_choice': '1',
+        }
+        with open(config_file, 'w') as file:
+            config.write(file)
+    
+    # Load the configuration file
+    config.read(config_file)
+
+    # Convert the config into a dictionary and return it
+    kvp = {section: dict(config.items(section)) for section in config.sections()}
+    return kvp
+
+
+def update_config(section, key, value):
+    config = configparser.ConfigParser()
+    config_file = 'mypalclaude.toml'
+
+    # Load the existing configuration file
+    if os.path.exists(config_file):
+        config.read(config_file)
+    else:
+        raise FileNotFoundError(f"The configuration file '{config_file}' does not exist.")
+
+    # Update the value
+    if not config.has_section(section):
+        config.add_section(section)
+    config.set(section, key, value)
+
+    # Write the updated configuration back to the file
+    with open(config_file, 'w') as file:
+        config.write(file)
+```
+
+## File: tests/test_adaptive_ranking.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_adaptive_ranking.py`
+
+```python
+import pytest
+from memory.memory_interface import MemoryInterface, AdaptiveRankingAlgorithm, LearningComponent
+
+def test_ranking_algorithm():
+    algorithm = AdaptiveRankingAlgorithm()
+    learning = LearningComponent(algorithm)
+
+    # Simulate some memory usage
+    learning.record_retrieval("Python data", [{"id": "1", "content": "Python is great"}])
+    learning.record_retrieval("Python data", [{"id": "1", "content": "Python is great"}])
+    learning.record_retrieval("Java enterprise", [{"id": "2", "content": "Java is widely used"}])
+
+    # Update weights
+    learning.update_ranking_weights()
+
+    # Check if weights were updated
+    assert algorithm.weights['usage_frequency'] > 0.2  # Assuming initial weight was 0.2
+    assert algorithm.weights['recency'] < 0.2  # Assuming initial weight was 0.2
+
+def test_context_specific_ranking():
+    algorithm = AdaptiveRankingAlgorithm()
+    learning = LearningComponent(algorithm)
+
+    # Simulate context-specific memory usage
+    learning.record_retrieval("Python data science", [{"id": "1", "content": "Python for data"}])
+    learning.record_retrieval("Python web development", [{"id": "2", "content": "Python for web"}])
+
+    # Update weights
+    learning.update_ranking_weights()
+
+    # Check if context weights were created
+    assert len(learning.calculate_context_weights()) == 2
+
+    # Verify that context-specific ranking works
+    results = algorithm.rank("Python data analysis", 
+                             [{"id": "1", "content": "Python for data"}, 
+                              {"id": "2", "content": "Python for web"}],
+                             [], {})
+    assert results[0]['id'] == "1"
+
+def test_learning_component():
+    algorithm = AdaptiveRankingAlgorithm()
+    learning = LearningComponent(algorithm)
+    
+    learning.record_retrieval("test query", [{"id": "1", "content": "test content"}])
+    assert learning.memory_usage["1"] == 1
+    assert "test query" in str(learning.query_contexts)
+    
+    learning.record_new_memory("2")
+    assert learning.memory_usage["2"] == 0
+    
+    learning.update_ranking_weights()
+    # Add assertions to check if weights were updated
+
+def test_memory_interface_with_adaptive_ranking():
+    memory = MemoryInterface()
+    
+    # Add some test memories
+    memory.add_memory("Test content 1")
+    memory.add_memory("Test content 2")
+    
+    # Retrieve memories
+    results = memory.retrieve_memory("test")
+    assert len(results) > 0
+    
+    # Update weights
+    memory.update_weights()
+    
+    # Retrieve memories again and check if ranking has changed
+    new_results = memory.retrieve_memory("test")
+    assert len(new_results) > 0
+    # Add assertions to check if ranking has changed
+
+# Add more tests as needed
+```
+
+## File: tests/test_memory_system_integration.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_memory_system_integration.py`
+
+```python
+import pytest
+from memory.memory_interface import MemoryInterface
+from memory.ranking_algorithm import AdaptiveRankingAlgorithm
+from memory.learning_component import LearningComponent
+
+@pytest.fixture
+def memory_system():
+    return MemoryInterface()
+
+def test_add_and_retrieve_memory(memory_system):
+    # Test adding a memory
+    memory_id = memory_system.add_memory("The quick brown fox jumps over the lazy dog")
+    assert memory_id is not None
+
+    # Test retrieving the memory
+    results = memory_system.retrieve_memory("quick fox")
+    assert len(results) > 0
+    assert "quick brown fox" in results[0]['content']
+
+def test_relationship_optimization(memory_system):
+    # Add two related memories
+    memory_id1 = memory_system.add_memory("Alice likes cats")
+    memory_id2 = memory_system.add_memory("Bob likes dogs")
+
+    # Add a relationship
+    memory_system.create_or_reuse_relationship(memory_id1, {"type": "Person", "name": "Alice", "relationship": "LIKES"})
+    memory_system.create_or_reuse_relationship(memory_id2, {"type": "Person", "name": "Bob", "relationship": "LIKES"})
+
+    # Try to add the same relationship again
+    memory_system.create_or_reuse_relationship(memory_id1, {"type": "Person", "name": "Alice", "relationship": "LIKES"})
+
+    # Retrieve related nodes
+    related = memory_system.get_related_nodes_with_details(memory_id1)
+    assert len(related) == 1
+    assert related[0]['name'] == 'Alice'
+    assert related[0]['relationship_type'] == 'LIKES'
+
+def test_adaptive_ranking(memory_system):
+    # Add some memories
+    memory_system.add_memory("Python is great for data science")
+    memory_system.add_memory("Java is widely used in enterprise applications")
+    memory_system.add_memory("JavaScript is essential for web development")
+
+    # Retrieve memories multiple times to affect ranking
+    for _ in range(5):
+        memory_system.retrieve_memory("Python data science")
+    for _ in range(3):
+        memory_system.retrieve_memory("JavaScript web")
+
+    # Update weights
+    memory_system.update_weights()
+
+    # Retrieve memories again and check ranking
+    results = memory_system.retrieve_memory("programming languages")
+    assert "Python" in results[0]['content']
+    assert "JavaScript" in results[1]['content']
+
+def test_context_adaptation(memory_system):
+    # Add memories
+    memory_system.add_memory("Mars is the fourth planet from the Sun")
+    memory_system.add_memory("Mars is the Roman god of war")
+    memory_system.add_memory("The Mars chocolate bar was first manufactured in 1932")
+
+    # Retrieve in astronomy context
+    results = memory_system.retrieve_memory("Mars in space")
+    assert "planet" in results[0]['content']
+
+    # Retrieve in mythology context
+    results = memory_system.retrieve_memory("Mars in mythology")
+    assert "Roman god" in results[0]['content']
+
+    # Retrieve in food context
+    results = memory_system.retrieve_memory("Mars as food")
+    assert "chocolate" in results[0]['content']
+
+def test_memory_persistence(memory_system):
+    # Add a memory
+    memory_system.add_memory("This is a test of memory persistence")
+
+    # Simulate system restart by creating a new MemoryInterface instance
+    new_memory_system = MemoryInterface()
+
+    # Try to retrieve the memory from the new instance
+    results = new_memory_system.retrieve_memory("memory persistence")
+    assert len(results) > 0
+    assert "test of memory persistence" in results[0]['content']
+
+# Add more integration tests as needed
+```
+
+## File: .pytest_cache/v/cache/stepwise
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/v/cache/stepwise`
+
+```
+[]
+```
+
+## File: backend/__init__.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/__init__.py`
+
+```python
+
+```
+
+## File: utils/exceptions.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/utils/exceptions.py`
+
+```python
+# utils/exceptions.py
+
+import logging
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
+
+class MyPalClaudeException(Exception):
+    """Base exception class for MyPalClaude project"""
+    def __init__(self, message, error_code=None):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+class DatabaseException(MyPalClaudeException):
+    """Exception raised for database-related errors"""
+    pass
+
+class MemoryException(MyPalClaudeException):
+    """Exception raised for memory-related errors"""
+    pass
+
+class APIException(MyPalClaudeException):
+    """Exception raised for API-related errors"""
+    pass
+
+class ConfigurationException(MyPalClaudeException):
+    """Exception raised for configuration-related errors"""
+    pass
+
+class InterfaceException(MyPalClaudeException):
+    """Exception raised for interface-related errors"""
+    pass
+
+def handle_exception(exc: Exception, logger: logging.Logger):
+    if isinstance(exc, MyPalClaudeException):
+        error_message = f"{type(exc).__name__}: {exc.message}"
+        if exc.error_code:
+            error_message += f" (Error Code: {exc.error_code})"
+        logger.error(error_message, exc_info=True)
+        console.print(Panel(error_message, title="Error", border_style="red"))
+    else:
+        logger.exception("An unexpected error occurred")
+        console.print(Panel(str(exc), title="Unexpected Error", border_style="red"))
+
+```
+
+## File: tests/__init__.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/tests/__init__.py`
+
+```python
+
 ```
 
 ## File: .pytest_cache/v/cache/nodeids
@@ -1807,6 +2372,81 @@ Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/v/cache/nodeids`
   "tests/test_memory_system_integration.py::test_context_adaptation",
   "tests/test_memory_system_integration.py::test_memory_persistence"
 ]
+```
+
+## File: .pytest_cache/README.md
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/README.md`
+
+<h1>pytest cache directory</h1>
+
+<p>This directory contains data from the pytest's cache plugin,
+which provides the <code>--lf</code> and <code>--ff</code> options, as well as the <code>cache</code> fixture.</p>
+
+<p><strong>Do not</strong> commit this to version control.</p>
+
+<p>See <a href="https://docs.pytest.org/en/stable/how-to/cache.html">the docs</a> for more information.</p>
+
+
+## File: backend/command_handler.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/command_handler.py`
+
+```python
+from interfaces.shared.shared_interface import SharedInterface
+from utils import import_conversations
+import logging
+
+logger = logging.getLogger(__name__)
+
+class CommandHandler:
+    def __init__(self, interface: SharedInterface):
+        self.interface = interface
+
+    async def chat(self, message: str, user_id: str = None):
+        return await self.interface.chat_with_claude(message, user_id)
+
+    async def remember(self, query: str):
+        results = await self.interface.retrieve_memories(query)
+        if results:
+            response = "Here's what I remember:\n\n"
+            for result in results:
+                response += f"- {result['content']}\n"
+                for related in result.get('related', []):
+                    response += f"  Related: {related['name']} ({related['relationship_type']})\n"
+        else:
+            response = "I'm sorry, I couldn't find any relevant memories."
+        return response
+
+    async def add_memory(self, content: str):
+        success = await self.interface.add_memory(content)
+        return "Memory added successfully." if success else "Failed to add memory."
+
+    async def wipe(self):
+        return await self.interface.wipe()
+
+    def set_log_level(self, level: str):
+        return self.interface.set_log_level(level)
+
+    def get_menu(self):
+        return """
+        Available commands:
+        - !chat <message>: Chat with Claude
+        - !remember <query>: Retrieve memories related to the query
+        - !add <content>: Add a new memory
+        - !wipe: Wipe both databases (requires confirmation)
+        - !loglevel <level>: Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        - !import <file_path>: Import conversations from a file
+        - !menu: Show this menu
+        """
+
+    async def import_conversations(self, file_path: str):
+        try:
+            await import_conversations(file_path, self.interface.memory)
+            return f"Conversations imported successfully from {file_path}"
+        except Exception as e:
+            return f"Error importing conversations: {str(e)}"
+
 ```
 
 ## File: backend/chat_backend.py
@@ -1927,455 +2567,24 @@ class ChatBackend:
 
 ```
 
-## File: .pytest_cache/v/cache/stepwise
+## File: backend/commands/remember.py
 
-Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/v/cache/stepwise`
-
-```
-[]
-```
-
-## File: .pytest_cache/.gitignore
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/.gitignore`
-
-```
-# Created by pytest automatically.
-*
-
-```
-
-## File: memory/graph_operations.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/memory/graph_operations.py`
-
-```python
-from neo4j import GraphDatabase
-from typing import List, Dict, Any
-import requests
-import json
-import os
-
-class GraphOperations:
-    @staticmethod
-    def call_gpt4_mini(prompt: str) -> str:
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key:
-            raise ValueError("OPENROUTER_API_KEY environment variable is not set")
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": "openai/gpt-4-0613",
-            "messages": [{"role": "user", "content": prompt}]
-        }
-
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-
-    @staticmethod
-    def analyze_content_for_labels(content: str) -> List[str]:
-        prompt = f"Analyze the following content and provide a list of relevant labels or categories:\n\n{content}\n\nLabels:"
-        response = GraphOperations.call_gpt4_mini(prompt)
-        labels = [label.strip() for label in response.split(',')]
-        return list(set(labels))  # Remove duplicates
-
-    @staticmethod
-    def infer_relationship_type(source_content: str, target_content: str) -> str:
-        prompt = f"Analyze the relationship between the following two pieces of content and provide a single word or short phrase describing their relationship:\n\nContent 1: {source_content}\n\nContent 2: {target_content}\n\nRelationship:"
-        response = GraphOperations.call_gpt4_mini(prompt)
-        return response.strip().upper().replace(' ', '_')
-    def __init__(self, neo4j_driver):
-        self.driver = neo4j_driver
-
-    def create_node(self, content: str, additional_properties: Dict[str, Any] = None) -> str:
-        labels = self.analyze_content_for_labels(content)
-        properties = {"content": content}
-        if additional_properties:
-            properties.update(additional_properties)
-        
-        label_string = ':'.join(labels) if labels else 'Content'
-        
-        with self.driver.session() as session:
-            result = session.run(
-                f"CREATE (n:{label_string} $props) RETURN id(n) as node_id",
-                props=properties
-            )
-            return result.single()["node_id"]
-
-    def create_relationship(self, start_node_id: str, end_node_id: str, properties: Dict[str, Any] = None):
-        with self.driver.session() as session:
-            # Fetch the content of both nodes
-            start_node = session.run("MATCH (n) WHERE id(n) = $id RETURN n.content as content", id=start_node_id).single()
-            end_node = session.run("MATCH (n) WHERE id(n) = $id RETURN n.content as content", id=end_node_id).single()
-            
-            if start_node and end_node:
-                rel_type = self.infer_relationship_type(start_node["content"], end_node["content"])
-                
-                session.run(
-                    f"""
-                    MATCH (a), (b)
-                    WHERE id(a) = $start_id AND id(b) = $end_id
-                    CREATE (a)-[r:{rel_type} $props]->(b)
-                    RETURN type(r)
-                    """,
-                    start_id=start_node_id,
-                    end_id=end_node_id,
-                    props=properties or {}
-                )
-            else:
-                raise ValueError("One or both nodes not found")
-
-    def get_related_nodes(self, node_id: str, relationship_type: str = None, direction: str = "BOTH") -> List[Dict[str, Any]]:
-        direction_query = {
-            "OUTGOING": "()-[r]->",
-            "INCOMING": "<-[r]-",
-            "BOTH": "-[r]-"
-        }.get(direction.upper(), "-[r]-")
-        
-        rel_type_query = f" AND type(r) = '{relationship_type}'" if relationship_type else ""
-        
-        with self.driver.session() as session:
-            result = session.run(
-                f"""
-                MATCH (n){direction_query}(related)
-                WHERE id(n) = $node_id{rel_type_query}
-                RETURN related, type(r) AS relationship_type
-                """,
-                node_id=node_id
-            )
-            return [{"node": dict(record["related"]), "relationship_type": record["relationship_type"]} for record in result]
-
-    def find_paths(self, start_node_id: str, end_node_id: str, max_depth: int = 4) -> List[List[Dict[str, Any]]]:
-        with self.driver.session() as session:
-            result = session.run(
-                """
-                MATCH path = shortestPath((start)-[*1..{max_depth}]-(end))
-                WHERE id(start) = $start_id AND id(end) = $end_id
-                RETURN [node in nodes(path) | {id: id(node), labels: labels(node), properties: properties(node)}] AS path_nodes,
-                       [rel in relationships(path) | {type: type(rel), properties: properties(rel)}] AS path_rels
-                """,
-                start_id=start_node_id, end_id=end_node_id, max_depth=max_depth
-            )
-            paths = []
-            for record in result:
-                path = []
-                for node, rel in zip(record["path_nodes"], record["path_rels"] + [None]):
-                    path.append({"node": node, "relationship": rel})
-                paths.append(path)
-            return paths
-
-```
-
-## File: utils/config.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/utils/config.py`
-
-```python
-import os
-from dotenv import load_dotenv
-import configparser
-
-def load_config():
-    envconfig = load_dotenv()
-    tomlconfig = setup_config_file()
-    return {**envconfig, **tomlconfig}
-
-def load_dotenv():
-    
-    config = {
-        'DISCORD_TOKEN': os.getenv('DISCORD_TOKEN'),
-        'DISCORD_CHANNEL_ID': int(os.getenv('DISCORD_CHANNEL_ID')),
-        'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),
-        'OPENROUTER_API_KEY': os.getenv('OPENROUTER_API_KEY'),
-        'SUPABASE_HOST': os.getenv('SUPABASE_HOST'),
-        'SUPABASE_DATABASE': os.getenv('SUPABASE_DATABASE'),
-        'SUPABASE_USER': os.getenv('SUPABASE_USER'),
-        'SUPABASE_PASSWORD': os.getenv('SUPABASE_PASSWORD'),
-        'NEO4J_DATABASE': os.getenv('NEO4J_DATABASE'),
-        'NEO4J_URI': os.getenv('NEO4J_URI'),
-        'NEO4J_USER': os.getenv('NEO4J_USER'),
-        'NEO4J_PASSWORD': os.getenv('NEO4J_PASSWORD'),
-        'REDIS_HOST': os.getenv('REDIS_HOST'),
-        'REDIS_PORT': os.getenv('REDIS_PORT'),
-        'REDIS_PASSWORD': os.getenv('REDIS_PASSWORD'),
-        'REDIS_DB': os.getenv('REDIS_DB'),
-        'REDIS_NAME': os.getenv('REDIS_NAME'),
-    }
-    
-    # Validate required configuration
-    required_keys = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_ID', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY',
-                     'REDIS_HOST', 'REDIS_DB', 'REDIS_PASSWORD', 'REDIS_PORT',
-                     'NEO4J_DATABASE','NEO4J_URI', 'NEO4J_USER', 'NEO4J_PASSWORD']
-    
-    for key in required_keys:
-        if not config[key]:
-            raise ValueError(f"Missing required configuration: {key}")
-    
-    return config
-
-def setup_config_file():
-    config = configparser.ConfigParser()
-    config_file = 'mypalclaude.toml'
-
-    # Check if the config file exists
-    if not os.path.exists(config_file):
-        # If the file doesn't exist, create it with default values
-        config['MEMORY'] = {
-            'last_file_path': '',
-            'last_main_choice': '2',
-            'last_discord_choice': '1',
-        }
-        with open(config_file, 'w') as file:
-            config.write(file)
-    
-    # Load the configuration file
-    config.read(config_file)
-
-    # Convert the config into a dictionary and return it
-    kvp = {section: dict(config.items(section)) for section in config.sections()}
-    return kvp
-
-
-def update_config(section, key, value):
-    config = configparser.ConfigParser()
-    config_file = 'mypalclaude.toml'
-
-    # Load the existing configuration file
-    if os.path.exists(config_file):
-        config.read(config_file)
-    else:
-        raise FileNotFoundError(f"The configuration file '{config_file}' does not exist.")
-
-    # Update the value
-    if not config.has_section(section):
-        config.add_section(section)
-    config.set(section, key, value)
-
-    # Write the updated configuration back to the file
-    with open(config_file, 'w') as file:
-        config.write(file)
-```
-
-## File: tests/test_exception_handling.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_exception_handling.py`
-
-```python
-# tests/test_exception_handling.py
-
-import unittest
-from unittest.mock import patch, MagicMock
-from io import StringIO
-import logging
-from utils.exceptions import (
-    MyPalClaudeException, DatabaseException, MemoryException, 
-    APIException, ConfigurationException, InterfaceException
-)
-from utils.exception_handler import handle_exception
-
-class TestExceptionHandling(unittest.TestCase):
-
-    def setUp(self):
-        self.logger = logging.getLogger('test_logger')
-        self.logger.setLevel(logging.ERROR)
-        self.log_capture = StringIO()
-        handler = logging.StreamHandler(self.log_capture)
-        self.logger.addHandler(handler)
-
-    def test_handle_my_pal_claude_exception(self):
-        exc = MyPalClaudeException("Test error", error_code="TEST001")
-        with patch('utils.exception_handler.console.print') as mock_print:
-            handle_exception(exc, self.logger)
-            mock_print.assert_called_once()
-            self.assertIn("MyPalClaudeException: Test error (Error Code: TEST001)", self.log_capture.getvalue())
-
-    def test_handle_database_exception(self):
-        exc = DatabaseException("Database connection failed", error_code="DB001")
-        with patch('utils.exception_handler.console.print') as mock_print:
-            handle_exception(exc, self.logger)
-            mock_print.assert_called_once()
-            self.assertIn("DatabaseException: Database connection failed (Error Code: DB001)", self.log_capture.getvalue())
-
-    def test_handle_unexpected_exception(self):
-        exc = ValueError("Unexpected error")
-        with patch('utils.exception_handler.console.print') as mock_print:
-            handle_exception(exc, self.logger)
-            mock_print.assert_called_once()
-            self.assertIn("ValueError: Unexpected error", self.log_capture.getvalue())
-
-    # Add more tests for other exception types...
-
-if __name__ == '__main__':
-    unittest.main()
-
-```
-
-## File: tests/test_memory_system_integration.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_memory_system_integration.py`
-
-```python
-import pytest
-from memory.memory_interface import MemoryInterface
-from memory.ranking_algorithm import AdaptiveRankingAlgorithm
-from memory.learning_component import LearningComponent
-
-@pytest.fixture
-def memory_system():
-    return MemoryInterface()
-
-def test_add_and_retrieve_memory(memory_system):
-    # Test adding a memory
-    memory_id = memory_system.add_memory("The quick brown fox jumps over the lazy dog")
-    assert memory_id is not None
-
-    # Test retrieving the memory
-    results = memory_system.retrieve_memory("quick fox")
-    assert len(results) > 0
-    assert "quick brown fox" in results[0]['content']
-
-def test_relationship_optimization(memory_system):
-    # Add two related memories
-    memory_id1 = memory_system.add_memory("Alice likes cats")
-    memory_id2 = memory_system.add_memory("Bob likes dogs")
-
-    # Add a relationship
-    memory_system.create_or_reuse_relationship(memory_id1, {"type": "Person", "name": "Alice", "relationship": "LIKES"})
-    memory_system.create_or_reuse_relationship(memory_id2, {"type": "Person", "name": "Bob", "relationship": "LIKES"})
-
-    # Try to add the same relationship again
-    memory_system.create_or_reuse_relationship(memory_id1, {"type": "Person", "name": "Alice", "relationship": "LIKES"})
-
-    # Retrieve related nodes
-    related = memory_system.get_related_nodes_with_details(memory_id1)
-    assert len(related) == 1
-    assert related[0]['name'] == 'Alice'
-    assert related[0]['relationship_type'] == 'LIKES'
-
-def test_adaptive_ranking(memory_system):
-    # Add some memories
-    memory_system.add_memory("Python is great for data science")
-    memory_system.add_memory("Java is widely used in enterprise applications")
-    memory_system.add_memory("JavaScript is essential for web development")
-
-    # Retrieve memories multiple times to affect ranking
-    for _ in range(5):
-        memory_system.retrieve_memory("Python data science")
-    for _ in range(3):
-        memory_system.retrieve_memory("JavaScript web")
-
-    # Update weights
-    memory_system.update_weights()
-
-    # Retrieve memories again and check ranking
-    results = memory_system.retrieve_memory("programming languages")
-    assert "Python" in results[0]['content']
-    assert "JavaScript" in results[1]['content']
-
-def test_context_adaptation(memory_system):
-    # Add memories
-    memory_system.add_memory("Mars is the fourth planet from the Sun")
-    memory_system.add_memory("Mars is the Roman god of war")
-    memory_system.add_memory("The Mars chocolate bar was first manufactured in 1932")
-
-    # Retrieve in astronomy context
-    results = memory_system.retrieve_memory("Mars in space")
-    assert "planet" in results[0]['content']
-
-    # Retrieve in mythology context
-    results = memory_system.retrieve_memory("Mars in mythology")
-    assert "Roman god" in results[0]['content']
-
-    # Retrieve in food context
-    results = memory_system.retrieve_memory("Mars as food")
-    assert "chocolate" in results[0]['content']
-
-def test_memory_persistence(memory_system):
-    # Add a memory
-    memory_system.add_memory("This is a test of memory persistence")
-
-    # Simulate system restart by creating a new MemoryInterface instance
-    new_memory_system = MemoryInterface()
-
-    # Try to retrieve the memory from the new instance
-    results = new_memory_system.retrieve_memory("memory persistence")
-    assert len(results) > 0
-    assert "test of memory persistence" in results[0]['content']
-
-# Add more integration tests as needed
-```
-
-## File: backend/command_handler.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/command_handler.py`
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/remember.py`
 
 ```python
 from interfaces.shared.shared_interface import SharedInterface
-from utils import import_conversations
-import logging
 
-logger = logging.getLogger(__name__)
-
-class CommandHandler:
-    def __init__(self, interface: SharedInterface):
-        self.interface = interface
-
-    async def chat(self, message: str, user_id: str = None):
-        return await self.interface.chat_with_claude(message, user_id)
-
-    async def remember(self, query: str):
-        results = await self.interface.retrieve_memories(query)
-        if results:
-            response = "Here's what I remember:\n\n"
-            for result in results:
-                response += f"- {result['content']}\n"
-                for related in result.get('related', []):
-                    response += f"  Related: {related['name']} ({related['relationship_type']})\n"
-        else:
-            response = "I'm sorry, I couldn't find any relevant memories."
-        return response
-
-    async def add_memory(self, content: str):
-        success = await self.interface.add_memory(content)
-        return "Memory added successfully." if success else "Failed to add memory."
-
-    async def wipe(self):
-        return await self.interface.wipe()
-
-    def set_log_level(self, level: str):
-        return self.interface.set_log_level(level)
-
-    def get_menu(self):
-        return """
-        Available commands:
-        - !chat <message>: Chat with Claude
-        - !remember <query>: Retrieve memories related to the query
-        - !add <content>: Add a new memory
-        - !wipe: Wipe both databases (requires confirmation)
-        - !loglevel <level>: Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        - !import <file_path>: Import conversations from a file
-        - !menu: Show this menu
-        """
-
-    async def import_conversations(self, file_path: str):
-        try:
-            await import_conversations(file_path, self.interface.memory)
-            return f"Conversations imported successfully from {file_path}"
-        except Exception as e:
-            return f"Error importing conversations: {str(e)}"
-
-```
-
-## File: backend/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/__init__.py`
-
-```python
+async def remember(interface: SharedInterface, query: str):
+    results = await interface.retrieve_memories(query)
+    if results:
+        response = "Here's what I remember:\n\n"
+        for result in results:
+            response += f"- {result['content']}\n"
+            for related in result.get('related', []):
+                response += f"  Related: {related['name']} ({related['relationship_type']})\n"
+    else:
+        response = "I'm sorry, I couldn't find any relevant memories."
+    return response
 
 ```
 
@@ -2402,238 +2611,6 @@ def get_menu():
     You can also type any message to chat with Claude directly.
     """
     return menu_text
-
-```
-
-## File: tests/test_memory_interface_exceptions.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_memory_interface_exceptions.py`
-
-```python
-# tests/test_memory_interface_exceptions.py
-
-import unittest
-from unittest.mock import patch, MagicMock
-from memory.memory_interface import MemoryInterface
-from utils.exceptions import MemoryException, DatabaseException
-
-class TestMemoryInterfaceExceptions(unittest.TestCase):
-
-    def setUp(self):
-        self.memory_interface = MemoryInterface()
-
-    @patch('memory.memory_interface.store_embedding')
-    def test_add_memory_database_exception(self, mock_store_embedding):
-        mock_store_embedding.return_value = False
-        
-        with self.assertRaises(DatabaseException) as context:
-            self.memory_interface.add_memory("Test content")
-        
-        self.assertTrue("Failed to store memory embedding in vector database" in str(context.exception))
-        self.assertEqual(context.exception.error_code, "VDB001")
-
-    @patch('memory.memory_interface.similarity_search')
-    def test_retrieve_memory_no_results(self, mock_similarity_search):
-        mock_similarity_search.return_value = []
-        
-        with self.assertRaises(MemoryException) as context:
-            self.memory_interface.retrieve_memory("Test query")
-        
-        self.assertTrue("No memories found for query" in str(context.exception))
-        self.assertEqual(context.exception.error_code, "MEM002")
-
-    @patch('memory.memory_interface.similarity_search')
-    def test_retrieve_memory_unexpected_error(self, mock_similarity_search):
-        mock_similarity_search.side_effect = Exception("Unexpected error")
-        
-        with self.assertRaises(MemoryException) as context:
-            self.memory_interface.retrieve_memory("Test query")
-        
-        self.assertTrue("Error retrieving memory" in str(context.exception))
-        self.assertEqual(context.exception.error_code, "MEM003")
-
-if __name__ == '__main__':
-    unittest.main()
-
-```
-
-## File: utils/exceptions.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/utils/exceptions.py`
-
-```python
-# utils/exceptions.py
-
-import logging
-from rich.console import Console
-from rich.panel import Panel
-
-console = Console()
-
-class MyPalClaudeException(Exception):
-    """Base exception class for MyPalClaude project"""
-    def __init__(self, message, error_code=None):
-        self.message = message
-        self.error_code = error_code
-        super().__init__(self.message)
-
-class DatabaseException(MyPalClaudeException):
-    """Exception raised for database-related errors"""
-    pass
-
-class MemoryException(MyPalClaudeException):
-    """Exception raised for memory-related errors"""
-    pass
-
-class APIException(MyPalClaudeException):
-    """Exception raised for API-related errors"""
-    pass
-
-class ConfigurationException(MyPalClaudeException):
-    """Exception raised for configuration-related errors"""
-    pass
-
-class InterfaceException(MyPalClaudeException):
-    """Exception raised for interface-related errors"""
-    pass
-
-def handle_exception(exc: Exception, logger: logging.Logger):
-    if isinstance(exc, MyPalClaudeException):
-        error_message = f"{type(exc).__name__}: {exc.message}"
-        if exc.error_code:
-            error_message += f" (Error Code: {exc.error_code})"
-        logger.error(error_message, exc_info=True)
-        console.print(Panel(error_message, title="Error", border_style="red"))
-    else:
-        logger.exception("An unexpected error occurred")
-        console.print(Panel(str(exc), title="Unexpected Error", border_style="red"))
-
-```
-
-## File: tests/test_adaptive_ranking.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/tests/test_adaptive_ranking.py`
-
-```python
-import pytest
-from memory.memory_interface import MemoryInterface, AdaptiveRankingAlgorithm, LearningComponent
-
-def test_ranking_algorithm():
-    algorithm = AdaptiveRankingAlgorithm()
-    learning = LearningComponent(algorithm)
-
-    # Simulate some memory usage
-    learning.record_retrieval("Python data", [{"id": "1", "content": "Python is great"}])
-    learning.record_retrieval("Python data", [{"id": "1", "content": "Python is great"}])
-    learning.record_retrieval("Java enterprise", [{"id": "2", "content": "Java is widely used"}])
-
-    # Update weights
-    learning.update_ranking_weights()
-
-    # Check if weights were updated
-    assert algorithm.weights['usage_frequency'] > 0.2  # Assuming initial weight was 0.2
-    assert algorithm.weights['recency'] < 0.2  # Assuming initial weight was 0.2
-
-def test_context_specific_ranking():
-    algorithm = AdaptiveRankingAlgorithm()
-    learning = LearningComponent(algorithm)
-
-    # Simulate context-specific memory usage
-    learning.record_retrieval("Python data science", [{"id": "1", "content": "Python for data"}])
-    learning.record_retrieval("Python web development", [{"id": "2", "content": "Python for web"}])
-
-    # Update weights
-    learning.update_ranking_weights()
-
-    # Check if context weights were created
-    assert len(learning.calculate_context_weights()) == 2
-
-    # Verify that context-specific ranking works
-    results = algorithm.rank("Python data analysis", 
-                             [{"id": "1", "content": "Python for data"}, 
-                              {"id": "2", "content": "Python for web"}],
-                             [], {})
-    assert results[0]['id'] == "1"
-
-def test_learning_component():
-    algorithm = AdaptiveRankingAlgorithm()
-    learning = LearningComponent(algorithm)
-    
-    learning.record_retrieval("test query", [{"id": "1", "content": "test content"}])
-    assert learning.memory_usage["1"] == 1
-    assert "test query" in str(learning.query_contexts)
-    
-    learning.record_new_memory("2")
-    assert learning.memory_usage["2"] == 0
-    
-    learning.update_ranking_weights()
-    # Add assertions to check if weights were updated
-
-def test_memory_interface_with_adaptive_ranking():
-    memory = MemoryInterface()
-    
-    # Add some test memories
-    memory.add_memory("Test content 1")
-    memory.add_memory("Test content 2")
-    
-    # Retrieve memories
-    results = memory.retrieve_memory("test")
-    assert len(results) > 0
-    
-    # Update weights
-    memory.update_weights()
-    
-    # Retrieve memories again and check if ranking has changed
-    new_results = memory.retrieve_memory("test")
-    assert len(new_results) > 0
-    # Add assertions to check if ranking has changed
-
-# Add more tests as needed
-```
-
-## File: utils/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/utils/__init__.py`
-
-```python
-
-```
-
-## File: backend/commands/loglevel.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/loglevel.py`
-
-```python
-from interfaces.shared.shared_interface import SharedInterface
-
-def set_log_level(interface: SharedInterface, level: str):
-    return interface.set_log_level(level)
-
-```
-
-## File: .pytest_cache/README.md
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/.pytest_cache/README.md`
-
-<h1>pytest cache directory</h1>
-
-<p>This directory contains data from the pytest's cache plugin,
-which provides the <code>--lf</code> and <code>--ff</code> options, as well as the <code>cache</code> fixture.</p>
-
-<p><strong>Do not</strong> commit this to version control.</p>
-
-<p>See <a href="https://docs.pytest.org/en/stable/how-to/cache.html">the docs</a> for more information.</p>
-
-
-## File: backend/commands/chat.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/chat.py`
-
-```python
-from interfaces.shared.shared_interface import SharedInterface
-
-async def chat(interface: SharedInterface, message: str, user_id: str = None):
-    return await interface.chat_with_claude(message, user_id)
 
 ```
 
@@ -3063,40 +3040,6 @@ async def import_conversations_command(interface: SharedInterface, file_path: st
 
 ```
 
-## File: backend/commands/wipe.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/wipe.py`
-
-```python
-from interfaces.shared.shared_interface import SharedInterface
-
-async def wipe(interface: SharedInterface):
-    success = await interface.wipe_databases()
-    return "Both databases have been successfully wiped." if success else "Failed to wipe one or both databases. Check the logs for more information."
-
-```
-
-## File: backend/commands/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/__init__.py`
-
-```python
-
-```
-
-## File: backend/commands/add_memory.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/add_memory.py`
-
-```python
-from interfaces.shared.shared_interface import SharedInterface
-
-async def add_memory(interface: SharedInterface, content: str):
-    success = await interface.add_memory(content)
-    return "Memory added successfully." if success else "Failed to add memory."
-
-```
-
 ## File: docs/file_list.txt
 
 Location: `/Users/heidornj/Code/aider/mypalclaude/docs/file_list.txt`
@@ -3144,6 +3087,52 @@ utils/import_conversations.py
 
 ```
 
+## File: backend/commands/wipe.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/wipe.py`
+
+```python
+from interfaces.shared.shared_interface import SharedInterface
+
+async def wipe(interface: SharedInterface):
+    success = await interface.wipe_databases()
+    return "Both databases have been successfully wiped." if success else "Failed to wipe one or both databases. Check the logs for more information."
+
+```
+
+## File: backend/commands/add_memory.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/add_memory.py`
+
+```python
+from interfaces.shared.shared_interface import SharedInterface
+
+async def add_memory(interface: SharedInterface, content: str):
+    success = await interface.add_memory(content)
+    return "Memory added successfully." if success else "Failed to add memory."
+
+```
+
+## File: backend/commands/__init__.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/__init__.py`
+
+```python
+
+```
+
+## File: backend/commands/loglevel.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/loglevel.py`
+
+```python
+from interfaces.shared.shared_interface import SharedInterface
+
+def set_log_level(interface: SharedInterface, level: str):
+    return interface.set_log_level(level)
+
+```
+
 ## File: interfaces/__init__.py
 
 Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/__init__.py`
@@ -3152,24 +3141,208 @@ Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/__init__.py`
 
 ```
 
-## File: backend/commands/remember.py
+## File: backend/commands/chat.py
 
-Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/remember.py`
+Location: `/Users/heidornj/Code/aider/mypalclaude/backend/commands/chat.py`
 
 ```python
 from interfaces.shared.shared_interface import SharedInterface
 
-async def remember(interface: SharedInterface, query: str):
-    results = await interface.retrieve_memories(query)
-    if results:
-        response = "Here's what I remember:\n\n"
-        for result in results:
-            response += f"- {result['content']}\n"
-            for related in result.get('related', []):
-                response += f"  Related: {related['name']} ({related['relationship_type']})\n"
-    else:
-        response = "I'm sorry, I couldn't find any relevant memories."
-    return response
+async def chat(interface: SharedInterface, message: str, user_id: str = None):
+    return await interface.chat_with_claude(message, user_id)
+
+```
+
+## File: interfaces/shared/__init__.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/shared/__init__.py`
+
+```python
+
+```
+
+## File: interfaces/discord/__init__.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/discord/__init__.py`
+
+```python
+
+```
+
+## File: interfaces/cli/__init__.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/cli/__init__.py`
+
+```python
+
+```
+
+## File: interfaces/cli/cli_interface.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/cli/cli_interface.py`
+
+```python
+# cli_interface.py
+
+import asyncio
+from interfaces.shared.shared_interface import SharedInterface
+from backend.chat_backend import ChatBackend
+import logging
+import shlex
+from rich import print as rprint
+from rich.panel import Panel
+from rich.console import Console
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import InMemoryHistory
+from backend.commands import add_memory, chat, import_conversations, loglevel, menu, remember, wipe
+
+console = Console()
+logger = logging.getLogger(__name__)
+
+class CLIInterface(SharedInterface):
+    async def run(self):
+        # logger.info("Starting CLI interface")
+        # await self.show_menu()
+
+        self.chat_backend = ChatBackend(self.config, self.memory)
+        self.history = InMemoryHistory()
+        self.session = PromptSession(history=self.history)
+
+        while True:
+            command = await self.session.prompt_async("")
+            await self.process_command(command)
+
+    async def process_command(self, command):
+        if command.startswith('!'):
+            cmd = command[1:].split(' ', 1)
+            command_name = cmd[0]
+            args = cmd[1] if len(cmd) > 1 else ""
+
+            if command_name == 'chat':
+                response = await chat.chat(self, args)
+            elif command_name == 'remember':
+                response = await remember.remember(self, args)
+            elif command_name == 'add':
+                parsed_args = shlex.split(args)
+                if parsed_args:
+                    content = parsed_args[0]
+                    response = await add_memory.add_memory(self, content)
+                else:
+                    response = "Error: No content provided for !add command"
+            elif command_name == 'loglevel':
+                response = loglevel.set_log_level(self, args)
+            elif command_name == 'wipe':
+                response = await wipe.wipe(self)
+            elif command_name == 'help' or command_name == 'menu':
+                response = menu.get_menu()
+            elif command_name == 'import':
+                response = await import_conversations.import_conversations_command(self, args)
+            elif command_name == 'exit':
+                logger.info("CLI interface closed")
+                asyncio.get_event_loop().stop()
+                return False
+            else:
+                response = "Invalid command. Type !help for available commands."
+
+            if command_name == 'help' or command_name == 'menu':
+                rprint(Panel(response, title="Menu", border_style="bold blue"))
+            else:
+                print(response)
+        else:
+            response = await self.handle_message(command)
+            rprint(Panel(response, title="[bold purple]Claude[/bold purple]", border_style="purple"))
+        return True
+
+    async def handle_message(self, message, user_id=None):
+        return await self.chat_with_claude(message)
+
+    async def chat_with_claude(self, initial_message=None):
+        if initial_message:
+            response = await super().chat_with_claude(initial_message)
+            return response
+        
+        rprint(Panel.fit("Starting chat session with Claude. Type 'end' to finish the conversation.", title="Chat Session", border_style="bold blue"))
+        while True:
+            user_input = await asyncio.get_event_loop().run_in_executor(None, console.input, "[bold green]You:[/bold green] ")
+            
+            if user_input.lower() == 'end':
+                break
+
+            with console.status("[bold yellow]Claude is thinking...[/bold yellow]"):
+                response = await super().chat_with_claude(user_input)
+            
+            rprint(Panel(response, title="[bold purple]Claude[/bold purple]", border_style="purple"))
+
+        return "Chat session ended."
+
+    async def remember(self, query):
+        memories = await self.retrieve_memories(query)
+        if memories:
+            response = "Here's what I remember:\n\n"
+            for memory in memories:
+                response += f"- {memory['content']}\n"
+                for related in memory.get('related', []):
+                    response += f"  Related: {related['name']} ({related['relationship_type']})\n"
+        else:
+            response = "I couldn't find any relevant memories."
+        rprint(Panel(response, title="Memories", border_style="bold green"))
+
+    async def wipe(self):
+        confirm = await asyncio.get_event_loop().run_in_executor(None, input, "Are you sure you want to wipe both databases? This action cannot be undone. Type 'yes' to confirm: ")
+        if confirm.lower() == 'yes':
+            success = await self.wipe_databases()
+            if success:
+                print("Both databases have been successfully wiped.")
+            else:
+                print("Failed to wipe one or both databases. Check the logs for more information.")
+        else:
+            print("Wipe operation cancelled.")
+
+async def run_cli(config, memory):
+    cli = CLIInterface(config, memory)
+    await cli.run()
+
+```
+
+## File: interfaces/shared/shared_interface.py
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/shared/shared_interface.py`
+
+```python
+from abc import ABC, abstractmethod
+
+class SharedInterface(ABC):
+    def __init__(self, config, memory):
+        self.config = config
+        self.memory = memory
+        self.chat_backend = None  # This will be set in the run method
+
+    @abstractmethod
+    async def run(self):
+        pass
+
+    @abstractmethod
+    async def handle_message(self, message, user_id=None):
+        pass
+
+    async def chat_with_claude(self, message, user_id=None):
+        return await self.chat_backend.process_message(message, user_id)
+
+    async def retrieve_memories(self, query):
+        return self.chat_backend.retrieve_memories(query)
+
+    async def add_memory(self, content):
+        return self.memory.add_memory(content, labels=["User Input"], relationships=[{"type": "User", "name": "CLI User", "relationship": "CREATED"}])
+
+    async def wipe_databases(self):
+        return self.memory.wipe_databases()
+
+    async def wipe(self):
+        success = await self.wipe_databases()
+        return "Both databases have been successfully wiped." if success else "Failed to wipe one or both databases. Check the logs for more information."
+
+    def set_log_level(self, level):
+        return self.chat_backend.set_log_level(level)
 
 ```
 
@@ -3328,6 +3501,86 @@ async def run_bot(config, memory):
     await bot.run()
 
 ```
+
+## File: docs/TODO.md
+
+Location: `/Users/heidornj/Code/aider/mypalclaude/docs/TODO.md`
+
+<h1>Project TODO List</h1>
+
+<h2>High Priority</h2>
+
+<ol>
+<li><p>Implement multi-model chat functionality</p>
+
+<ul>
+<li>File: backend/multi<em>model</em>chat.py</li>
+<li>Task: Refine the process<em>multi</em>model_chat function to better integrate different models</li>
+</ul></li>
+<li><p>Enhance adaptive ranking algorithm</p>
+
+<ul>
+<li>File: memory/memory_interface.py</li>
+<li>Task: Improve the AdaptiveRankingAlgorithm class for more accurate memory retrieval</li>
+</ul></li>
+<li><p>Optimize database operations</p>
+
+<ul>
+<li>File: memory/db_connections.py</li>
+<li>Task: Implement connection pooling and error handling for both Postgres and Neo4j</li>
+</ul></li>
+</ol>
+
+<h2>Medium Priority</h2>
+
+<ol>
+<li><p>Improve Discord bot integration</p>
+
+<ul>
+<li>File: interfaces/discord/discord_bot.py</li>
+<li>Task: Implement more commands and improve error handling</li>
+</ul></li>
+<li><p>Enhance CLI interface</p>
+
+<ul>
+<li>File: interfaces/cli/cli_interface.py</li>
+<li>Task: Add more functionality and improve user experience</li>
+</ul></li>
+<li><p>Implement comprehensive logging</p>
+
+<ul>
+<li>Task: Add detailed logging throughout the application for better debugging and monitoring</li>
+</ul></li>
+</ol>
+
+<h2>Low Priority</h2>
+
+<ol>
+<li><p>Expand test coverage</p>
+
+<ul>
+<li>Files: tests/*</li>
+<li>Task: Write more unit and integration tests, especially for the new multi-model chat functionality</li>
+</ul></li>
+<li><p>Optimize memory usage</p>
+
+<ul>
+<li>Task: Profile the application and optimize memory usage, especially for large-scale operations</li>
+</ul></li>
+<li><p>Implement user authentication</p>
+
+<ul>
+<li>Task: Add a simple authentication system for CLI and Discord interfaces</li>
+</ul></li>
+<li><p>Enhance documentation</p>
+
+<ul>
+<li>Task: Update all docstrings, comments, and README files to reflect recent changes</li>
+</ul></li>
+</ol>
+
+<p>Remember to update this TODO list regularly as tasks are completed and new priorities emerge. Follow the project conventions outlined in docs/CONVENTIONS.md when implementing these tasks.</p>
+
 
 ## File: docs/Claude-My Pal Claude.txt
 
@@ -5680,279 +5933,6 @@ leans back, grinning Onward, my valiant dev warrior! May your configs be clean, 
 
 
 ```
-
-## File: interfaces/discord/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/discord/__init__.py`
-
-```python
-
-```
-
-## File: interfaces/cli/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/cli/__init__.py`
-
-```python
-
-```
-
-## File: interfaces/shared/__init__.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/shared/__init__.py`
-
-```python
-
-```
-
-## File: interfaces/shared/shared_interface.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/shared/shared_interface.py`
-
-```python
-from abc import ABC, abstractmethod
-
-class SharedInterface(ABC):
-    def __init__(self, config, memory):
-        self.config = config
-        self.memory = memory
-        self.chat_backend = None  # This will be set in the run method
-
-    @abstractmethod
-    async def run(self):
-        pass
-
-    @abstractmethod
-    async def handle_message(self, message, user_id=None):
-        pass
-
-    async def chat_with_claude(self, message, user_id=None):
-        return await self.chat_backend.process_message(message, user_id)
-
-    async def retrieve_memories(self, query):
-        return self.chat_backend.retrieve_memories(query)
-
-    async def add_memory(self, content):
-        return self.memory.add_memory(content, labels=["User Input"], relationships=[{"type": "User", "name": "CLI User", "relationship": "CREATED"}])
-
-    async def wipe_databases(self):
-        return self.memory.wipe_databases()
-
-    async def wipe(self):
-        success = await self.wipe_databases()
-        return "Both databases have been successfully wiped." if success else "Failed to wipe one or both databases. Check the logs for more information."
-
-    def set_log_level(self, level):
-        return self.chat_backend.set_log_level(level)
-
-```
-
-## File: interfaces/cli/cli_interface.py
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/interfaces/cli/cli_interface.py`
-
-```python
-# cli_interface.py
-
-import asyncio
-from interfaces.shared.shared_interface import SharedInterface
-from backend.chat_backend import ChatBackend
-import logging
-import shlex
-from rich import print as rprint
-from rich.panel import Panel
-from rich.console import Console
-from prompt_toolkit import PromptSession
-from prompt_toolkit.history import InMemoryHistory
-from backend.commands import add_memory, chat, import_conversations, loglevel, menu, remember, wipe
-
-console = Console()
-logger = logging.getLogger(__name__)
-
-class CLIInterface(SharedInterface):
-    async def run(self):
-        # logger.info("Starting CLI interface")
-        # await self.show_menu()
-
-        self.chat_backend = ChatBackend(self.config, self.memory)
-        self.history = InMemoryHistory()
-        self.session = PromptSession(history=self.history)
-
-        while True:
-            command = await self.session.prompt_async("")
-            await self.process_command(command)
-
-    async def process_command(self, command):
-        if command.startswith('!'):
-            cmd = command[1:].split(' ', 1)
-            command_name = cmd[0]
-            args = cmd[1] if len(cmd) > 1 else ""
-
-            if command_name == 'chat':
-                response = await chat.chat(self, args)
-            elif command_name == 'remember':
-                response = await remember.remember(self, args)
-            elif command_name == 'add':
-                parsed_args = shlex.split(args)
-                if parsed_args:
-                    content = parsed_args[0]
-                    response = await add_memory.add_memory(self, content)
-                else:
-                    response = "Error: No content provided for !add command"
-            elif command_name == 'loglevel':
-                response = loglevel.set_log_level(self, args)
-            elif command_name == 'wipe':
-                response = await wipe.wipe(self)
-            elif command_name == 'help' or command_name == 'menu':
-                response = menu.get_menu()
-            elif command_name == 'import':
-                response = await import_conversations.import_conversations_command(self, args)
-            elif command_name == 'exit':
-                logger.info("CLI interface closed")
-                asyncio.get_event_loop().stop()
-                return False
-            else:
-                response = "Invalid command. Type !help for available commands."
-
-            if command_name == 'help' or command_name == 'menu':
-                rprint(Panel(response, title="Menu", border_style="bold blue"))
-            else:
-                print(response)
-        else:
-            response = await self.handle_message(command)
-            rprint(Panel(response, title="[bold purple]Claude[/bold purple]", border_style="purple"))
-        return True
-
-    async def handle_message(self, message, user_id=None):
-        return await self.chat_with_claude(message)
-
-    async def chat_with_claude(self, initial_message=None):
-        if initial_message:
-            response = await super().chat_with_claude(initial_message)
-            return response
-        
-        rprint(Panel.fit("Starting chat session with Claude. Type 'end' to finish the conversation.", title="Chat Session", border_style="bold blue"))
-        while True:
-            user_input = await asyncio.get_event_loop().run_in_executor(None, console.input, "[bold green]You:[/bold green] ")
-            
-            if user_input.lower() == 'end':
-                break
-
-            with console.status("[bold yellow]Claude is thinking...[/bold yellow]"):
-                response = await super().chat_with_claude(user_input)
-            
-            rprint(Panel(response, title="[bold purple]Claude[/bold purple]", border_style="purple"))
-
-        return "Chat session ended."
-
-    async def remember(self, query):
-        memories = await self.retrieve_memories(query)
-        if memories:
-            response = "Here's what I remember:\n\n"
-            for memory in memories:
-                response += f"- {memory['content']}\n"
-                for related in memory.get('related', []):
-                    response += f"  Related: {related['name']} ({related['relationship_type']})\n"
-        else:
-            response = "I couldn't find any relevant memories."
-        rprint(Panel(response, title="Memories", border_style="bold green"))
-
-    async def wipe(self):
-        confirm = await asyncio.get_event_loop().run_in_executor(None, input, "Are you sure you want to wipe both databases? This action cannot be undone. Type 'yes' to confirm: ")
-        if confirm.lower() == 'yes':
-            success = await self.wipe_databases()
-            if success:
-                print("Both databases have been successfully wiped.")
-            else:
-                print("Failed to wipe one or both databases. Check the logs for more information.")
-        else:
-            print("Wipe operation cancelled.")
-
-async def run_cli(config, memory):
-    cli = CLIInterface(config, memory)
-    await cli.run()
-
-```
-
-## File: docs/TODO.md
-
-Location: `/Users/heidornj/Code/aider/mypalclaude/docs/TODO.md`
-
-<h1>Project TODO List</h1>
-
-<h2>High Priority</h2>
-
-<ol>
-<li><p>Implement multi-model chat functionality</p>
-
-<ul>
-<li>File: backend/multi<em>model</em>chat.py</li>
-<li>Task: Refine the process<em>multi</em>model_chat function to better integrate different models</li>
-</ul></li>
-<li><p>Enhance adaptive ranking algorithm</p>
-
-<ul>
-<li>File: memory/memory_interface.py</li>
-<li>Task: Improve the AdaptiveRankingAlgorithm class for more accurate memory retrieval</li>
-</ul></li>
-<li><p>Optimize database operations</p>
-
-<ul>
-<li>File: memory/db_connections.py</li>
-<li>Task: Implement connection pooling and error handling for both Postgres and Neo4j</li>
-</ul></li>
-</ol>
-
-<h2>Medium Priority</h2>
-
-<ol>
-<li><p>Improve Discord bot integration</p>
-
-<ul>
-<li>File: interfaces/discord/discord_bot.py</li>
-<li>Task: Implement more commands and improve error handling</li>
-</ul></li>
-<li><p>Enhance CLI interface</p>
-
-<ul>
-<li>File: interfaces/cli/cli_interface.py</li>
-<li>Task: Add more functionality and improve user experience</li>
-</ul></li>
-<li><p>Implement comprehensive logging</p>
-
-<ul>
-<li>Task: Add detailed logging throughout the application for better debugging and monitoring</li>
-</ul></li>
-</ol>
-
-<h2>Low Priority</h2>
-
-<ol>
-<li><p>Expand test coverage</p>
-
-<ul>
-<li>Files: tests/*</li>
-<li>Task: Write more unit and integration tests, especially for the new multi-model chat functionality</li>
-</ul></li>
-<li><p>Optimize memory usage</p>
-
-<ul>
-<li>Task: Profile the application and optimize memory usage, especially for large-scale operations</li>
-</ul></li>
-<li><p>Implement user authentication</p>
-
-<ul>
-<li>Task: Add a simple authentication system for CLI and Discord interfaces</li>
-</ul></li>
-<li><p>Enhance documentation</p>
-
-<ul>
-<li>Task: Update all docstrings, comments, and README files to reflect recent changes</li>
-</ul></li>
-</ol>
-
-<p>Remember to update this TODO list regularly as tasks are completed and new priorities emerge. Follow the project conventions outlined in docs/CONVENTIONS.md when implementing these tasks.</p>
-
 
 ## File: docs/CONVENTIONS.md
 
