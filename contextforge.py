@@ -16,7 +16,7 @@ from watchdog.events import FileSystemEventHandler
 
 class ContextForgeHandler(FileSystemEventHandler):
     def __init__(self, project_path, output_file, output_format, max_file_size, allowed_extensions):
-        self.project_path = project_path
+        self.project_path = Path(project_path).resolve()
         self.output_file = Path(output_file).resolve()
         self.output_format = output_format
         self.max_file_size = max_file_size
@@ -179,17 +179,29 @@ def get_language(file_extension):
     }
     return extension_map.get(file_extension.lower(), '')
 
-def load_cfignore(project_path):
-    """Load and parse the .cfignore file."""
-    cfignore_path = os.path.join(project_path, '.cfignore')
+def load_ignore_patterns(project_path):
+    """Load and parse the .cfignore and .gitignore files."""
+    project_path = Path(project_path)
     ignore_patterns = []
-    if os.path.exists(cfignore_path):
+    
+    # Check for .cfignore
+    cfignore_path = project_path / '.cfignore'
+    if cfignore_path.exists():
         with open(cfignore_path, 'r') as f:
-            ignore_patterns = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+            ignore_patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+    
+    # Check for .gitignore
+    gitignore_path = project_path / '.gitignore'
+    if gitignore_path.exists():
+        with open(gitignore_path, 'r') as f:
+            ignore_patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+        # Automatically include .git directory when .gitignore is present
+        ignore_patterns.append('.git')
+    
     return ignore_patterns
 
 def should_ignore(path, ignore_patterns, output_file, allowed_extensions):
-    """Check if a file or directory should be ignored based on .cfignore patterns, output file, and allowed extensions."""
+    """Check if a file or directory should be ignored based on ignore patterns, output file, and allowed extensions."""
     # Normalize paths for consistent comparison
     path = Path(path).resolve()
     if output_file:
@@ -197,14 +209,20 @@ def should_ignore(path, ignore_patterns, output_file, allowed_extensions):
 
     # Check if the path is the output file
     if output_file:
-        if path.exists() and output_file.exists() and path.samefile(output_file):
-            return True
-        # If the output file doesn't exist yet, compare the normalized paths
-        if path == output_file:
-            return True
+        try:
+            if path.samefile(output_file):
+                return True
+        except FileNotFoundError:
+            # If the output file doesn't exist yet, compare the paths directly
+            if path == output_file:
+                return True
     
     # Get the relative path from the project root
-    rel_path = path.relative_to(Path.cwd())
+    try:
+        rel_path = path.relative_to(Path.cwd())
+    except ValueError:
+        # If path is not relative to cwd, use the full path
+        rel_path = path
     
     for pattern in ignore_patterns:
         # Remove leading and trailing whitespace and slashes
@@ -280,10 +298,12 @@ def process_file(file_info):
     
     return content, count_tokens(content)
 
-
 def compile_project(project_path, output_file, output_format='markdown', max_file_size=1000000, allowed_extensions=None):
     """Compile project files into a single file."""
-    ignore_patterns = load_cfignore(project_path)
+    project_path = Path(project_path).resolve()
+    output_file = Path(output_file).resolve()
+    
+    ignore_patterns = load_ignore_patterns(project_path)
     
     start_time = datetime.datetime.now()
     total_files = 0
@@ -296,13 +316,14 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
     with ThreadPoolExecutor() as executor:
         future_to_file = {}
         for root, dirs, files in os.walk(project_path):
+            root_path = Path(root)
             # Check and remove ignored directories
-            dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns, output_file, None)]
+            dirs[:] = [d for d in dirs if not should_ignore(root_path / d, ignore_patterns, output_file, None)]
             
             for file in files:
                 total_files += 1
-                file_path = os.path.join(root, file)
-                relative_path = os.path.relpath(file_path, project_path)
+                file_path = root_path / file
+                relative_path = file_path.relative_to(project_path)
                 
                 if not should_ignore(file_path, ignore_patterns, output_file, allowed_extensions):
                     future = executor.submit(process_file, (file_path, relative_path, ignore_patterns, max_file_size, output_file, allowed_extensions))
@@ -323,7 +344,7 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
     compilation_time = (end_time - start_time).total_seconds()
     
     metadata = {
-        "project_name": os.path.basename(project_path),
+        "project_name": project_path.name,
         "compilation_date": end_time.isoformat(),
         "total_files": total_files,
         "processed_files": processed_files,
@@ -434,26 +455,29 @@ Examples:
     parser.add_argument("--watch", action="store_true", help="Run in watch mode, recompiling on file changes")
     args = parser.parse_args()
 
+    # Convert project_path to absolute path
+    project_path = Path(args.project_path).resolve()
+
     # Determine the output file name
     if args.output_file is None:
-        project_name = os.path.basename(os.path.abspath(args.project_path))
-        args.output_file = f"{project_name}.{args.format if args.format != 'markdown' else 'md'}"
+        project_name = project_path.name
+        args.output_file = project_path / f"{project_name}.{args.format if args.format != 'markdown' else 'md'}"
     else:
+        args.output_file = Path(args.output_file).resolve()
         # Ensure the file extension matches the output format
-        base, ext = os.path.splitext(args.output_file)
         if args.format == 'markdown':
-            args.output_file = f"{base}.md"
-        elif ext.lower() != f'.{args.format}':
-            args.output_file = f"{base}.{args.format}"
+            args.output_file = args.output_file.with_suffix('.md')
+        else:
+            args.output_file = args.output_file.with_suffix(f'.{args.format}')
 
     # Convert extensions string to a set
     allowed_extensions = set(args.extensions.split(',')) if args.extensions else None
 
     if args.watch:
         print(f"Starting ContextForge in watch mode. Press Ctrl+C to stop.")
-        watch_project(args.project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
+        watch_project(project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
     else:
-        compile_project(args.project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
+        compile_project(project_path, args.output_file, args.format, args.max_file_size, allowed_extensions)
 
 if __name__ == "__main__":
     main()
