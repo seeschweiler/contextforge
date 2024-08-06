@@ -30,7 +30,7 @@ By bridging the gap between expansive codebases and the growing capabilities of 
   - [Installation](#installation)
   - [Usage](#usage)
   - [Configuration](#configuration)
-    - [.cfignore File](#cfignore-file)
+    - [.cfignore and .gitignore Files](#cfignore-and-gitignore-files)
   - [Output Formats](#output-formats)
   - [Examples](#examples)
   - [Contributing](#contributing)
@@ -40,7 +40,9 @@ By bridging the gap between expansive codebases and the growing capabilities of 
 - **Project Compilation**: Recursively scans and compiles the contents of a project directory into a single file.
 - **Multiple Output Formats**: Supports Markdown, HTML, JSON, and XML output formats.
 - **Syntax Highlighting**: Automatically detects and applies appropriate language syntax highlighting for code files.
-- **Ignore Patterns**: Supports `.cfignore` files to exclude specific files or directories from compilation, similar to `.gitignore`.
+- **Improved Path Handling**: Better support for files not directly below the project root in the tree structure.
+- **Flexible Ignore Patterns**: Supports both `.cfignore` and `.gitignore` files to exclude specific files or directories from compilation.
+- **Automatic .git Exclusion**: When using `.gitignore`, the `.git` directory is automatically excluded.
 - **File Size Limit**: Option to set a maximum file size for inclusion in the compilation.
 - **File Extension Filtering**: Ability to specify which file extensions to include in the compilation.
 - **Metadata Inclusion**: Adds useful metadata about the compilation process to the output.
@@ -88,11 +90,14 @@ python contextforge.py -h
 
 ## Configuration
 
-### .cfignore File
+### .cfignore and .gitignore Files
 
-ContextForge supports a `.cfignore` file in the root of your project directory. This file works similarly to `.gitignore`, allowing you to specify patterns for files and directories that should be excluded from the compilation.
+ContextForge now supports both `.cfignore` and `.gitignore` files in the root of your project directory. These files allow you to specify patterns for files and directories that should be excluded from the compilation.
 
-Example `.cfignore` file:
+- If both `.cfignore` and `.gitignore` exist, their contents are merged.
+- When using `.gitignore`, the `.git` directory is automatically excluded.
+
+Example `.cfignore` or `.gitignore` file:
 
 ```
 # Ignore all .log files
