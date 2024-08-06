@@ -179,13 +179,25 @@ def get_language(file_extension):
     }
     return extension_map.get(file_extension.lower(), '')
 
-def load_cfignore(project_path):
-    """Load and parse the .cfignore file."""
-    cfignore_path = os.path.join(project_path, '.cfignore')
+def load_ignore_patterns(project_path):
+    """Load and parse the .cfignore and .gitignore files."""
+    project_path = Path(project_path)
     ignore_patterns = []
-    if os.path.exists(cfignore_path):
+    
+    # Check for .cfignore
+    cfignore_path = project_path / '.cfignore'
+    if cfignore_path.exists():
         with open(cfignore_path, 'r') as f:
-            ignore_patterns = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+            ignore_patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+    
+    # Check for .gitignore
+    gitignore_path = project_path / '.gitignore'
+    if gitignore_path.exists():
+        with open(gitignore_path, 'r') as f:
+            ignore_patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+        # Automatically include .git directory when .gitignore is present
+        ignore_patterns.append('.git')
+    
     return ignore_patterns
 
 def should_ignore(path, ignore_patterns, output_file, allowed_extensions):
@@ -291,7 +303,7 @@ def compile_project(project_path, output_file, output_format='markdown', max_fil
     project_path = Path(project_path).resolve()
     output_file = Path(output_file).resolve()
     
-    ignore_patterns = load_cfignore(project_path)
+    ignore_patterns = load_ignore_patterns(project_path)
     
     start_time = datetime.datetime.now()
     total_files = 0
