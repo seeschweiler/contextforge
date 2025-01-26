@@ -27,8 +27,13 @@ By bridging the gap between expansive codebases and the growing capabilities of 
 - [ContextForge](#contextforge)
   - [Table of Contents](#table-of-contents)
   - [Features](#features)
-  - [Installation](#installation)
-  - [Usage](#usage)
+- [Installation](#installation)
+- [Development and Testing](#development-and-testing)
+- [Setting up Development Environment](#setting-up-development-environment)
+- [Running Tests](#running-tests)
+- [Test Dependencies and Tools](#test-dependencies-and-tools)
+- [Multi-environment Testing](#multi-environment-testing)
+- [Usage](#usage)
   - [Configuration](#configuration)
     - [.cfignore and .gitignore Files](#cfignore-and-gitignore-files)
   - [Output Formats](#output-formats)
@@ -54,18 +59,102 @@ By bridging the gap between expansive codebases and the growing capabilities of 
 
 ## Installation
 
+### Recommended: Install using pipx
+
+The recommended way to install ContextForge is using pipx, which creates an isolated environment and makes the command available globally:
+
+1. Install pipx if you haven't already:
+```
+pip install pipx
+pipx ensurepath
+```
+
+2. Install ContextForge using pipx (--include-deps is required):
+```
+pipx install contextforge --include-deps
+```
+
+### Alternative: Manual Installation
+
+If you prefer to install manually or want to contribute to development:
+
 1. Ensure you have Python 3.6 or later installed on your system.
 
 2. Clone the ContextForge repository:
-   ```
-   git clone https://github.com/seeschweiler/contextforge.git
-   cd contextforge
-   ```
+```
+git clone https://github.com/seeschweiler/contextforge.git
+cd contextforge
+```
 
 3. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+```
+pip install -r requirements.txt
+```
+
+## Development and Testing
+
+### Setting up Development Environment
+
+1. Install development dependencies:
+```
+pip install -r dev-requirements.txt
+# or
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+ContextForge uses pytest as its test runner. Here are different ways to run the tests:
+
+1. Run all tests:
+```
+pytest
+```
+
+2. Run tests with coverage report:
+```
+pytest --cov=contextforge tests/
+coverage report
+coverage html  # generates an HTML report
+```
+
+3. Run tests in parallel:
+```
+pytest -n auto  # uses all available CPU cores
+```
+
+4. Run specific test file or function:
+```
+pytest tests/test_specific.py
+pytest tests/test_specific.py::test_function
+```
+
+### Test Dependencies and Tools
+
+The following tools are available for development and testing:
+
+- **pytest**: Main test runner
+- **pytest-cov**: Coverage reporting
+- **pytest-xdist**: Parallel test execution
+- **tox**: Multi-environment testing
+- **black**: Code formatting
+- **flake8**: Code linting
+- **mypy**: Static type checking
+
+### Multi-environment Testing
+
+To test against multiple Python versions using tox:
+
+```
+tox
+```
+
+This will run the test suite against all configured Python versions in the tox.ini file. 
+To run for a specific environment:
+
+```
+tox -e py39  # for Python 3.9
+```
 
 ## Usage
 
