@@ -1,0 +1,33 @@
+# Test runners and automation
+pytest>=7.0.0
+pytest-cov>=4.1.0
+pytest-mock>=3.10.0
+pytest-xdist>=3.3.1
+pytest-randomly>=3.13.0
+pytest-sugar>=0.9.7
+pytest-timeout>=2.1.0
+coverage[toml]>=7.2.0
+tox>=4.6.0
+
+# Property-based testing
+hypothesis>=6.82.0
+
+# Type checking
+mypy>=1.4.0
+types-all>=1.0.0
+
+# Code quality
+black>=23.3.0
+flake8>=6.0.0
+pylint>=2.17.0
+isort>=5.12.0
+
+# Debug tools
+ipdb>=0.13.0
+
+# Documentation testing
+doctest-plus>=0.7.0
+
+# Security
+bandit>=1.7.5
+
